@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strat Sector Analysis</title>
+    <title>Strat Sector Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -11,34 +11,34 @@
         .sig-2d { color: #f87171; font-weight: 800; }
         .sig-3 { color: #60a5fa; font-weight: 800; text-decoration: underline; }
         .sig-1 { color: #fbbf24; font-weight: 800; }
-        .bg-obsidian { background: #0b0f1a; }
+        .bg-dark { background: #080c14; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-obsidian text-slate-300 min-h-screen p-4 font-sans">
+<body class="bg-dark text-slate-300 min-h-screen p-4 font-sans custom-scroll">
 
-    <div class="max-w-7xl mx-auto">
-        <header class="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+    <div class="max-w-[1600px] mx-auto">
+        <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
             <div>
-                <h1 class="text-2xl font-black text-white italic tracking-tighter">STRAT FLOW DASHBOARD</h1>
-                <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase">Context: Monthly Continuity & Simultaneous Breaks</p>
+                <h1 class="text-xl font-black text-white italic tracking-tighter uppercase">Strat Institutional Flow</h1>
+                <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase">Thematic Simultaneous Breaks • Monthly Continuity</p>
             </div>
-            <button onclick="runAnalysis()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2 px-8 rounded-full uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20">
-                Execute Intelligence Scan
-            </button>
+            <button onclick="runGlobalIntelligence()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2.5 px-8 rounded uppercase tracking-widest transition-all">Execute Scan</button>
         </header>
 
-        <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+        <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 mb-8">
             </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <div class="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
-                <h2 class="text-white text-xs font-black uppercase mb-4 tracking-widest">Sector Strength Comparison</h2>
-                <canvas id="sectorChart" height="200"></canvas>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-slate-900/40 p-5 rounded-xl border border-slate-800">
+                <h2 class="text-white text-[10px] font-black uppercase mb-4 tracking-widest">Sector & Theme Strength Comparison</h2>
+                <canvas id="flowChart" height="120"></canvas>
             </div>
 
-            <div id="gemini-context" class="bg-blue-900/10 border border-blue-500/30 p-6 rounded-xl hidden">
-                <h3 class="text-blue-400 font-black text-sm italic mb-3 uppercase underline">Gemini Strategic Context</h3>
-                <div id="analysis-text" class="text-sm leading-relaxed text-slate-200">
+            <div id="gemini-box" class="bg-blue-900/10 border border-blue-500/30 p-5 rounded-xl hidden">
+                <h3 class="text-blue-400 font-black text-xs italic mb-3 uppercase underline tracking-widest">Institutional Context</h3>
+                <div id="gemini-analysis" class="text-[13px] leading-relaxed text-slate-200 space-y-3">
                     </div>
             </div>
         </div>
@@ -47,21 +47,34 @@
     <script>
         const POLYGON_KEY = "lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn";
 
-        const groups = {
-            "Technology": ["XLK", "MSFT", "AAPL", "NVDA", "ADBE", "ORCL", "CRM"],
-            "Semis": ["SMH", "AMD", "TSM", "AVGO", "ARM", "INTC", "TXN"],
-            "Financials": ["XLF", "JPM", "V", "MA", "AXP", "BLK", "GS"],
-            "Energy": ["XLE", "XOP", "OIH", "XOM", "CVX", "COP", "MPC"],
-            "Thematic": ["ARKK", "HACK", "ICLN", "IBIT", "MSTR", "COIN"]
+        const masterList = {
+            "XLK (Tech)": ["XLK", "MSFT", "AAPL", "NVDA", "AVGO", "ORCL", "ADBE"],
+            "XLF (Financial)": ["XLF", "JPM", "V", "MA", "BAC", "GS", "MS"],
+            "XLE (Energy)": ["XLE", "XOM", "CVX", "COP", "SLB", "EOG", "MPC"],
+            "XLV (Health)": ["XLV", "LLY", "UNH", "JNJ", "ABBV", "MRK", "TMO"],
+            "XLY (Discretionary)": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "LOW"],
+            "XLP (Staples)": ["XLP", "PG", "COST", "KO", "PEP", "PM", "WMT"],
+            "XLI (Industrial)": ["XLI", "GE", "CAT", "UNP", "HON", "RTX", "LMT"],
+            "XLB (Materials)": ["XLB", "LIN", "APD", "SHW", "FCX", "ECL", "NEM"],
+            "XLU (Utilities)": ["XLU", "NEE", "SO", "DUK", "CEG", "SRE", "AEP"],
+            "XLRE (Real Estate)": ["XLRE", "PLD", "AMT", "EQIX", "WELL", "PSA", "CCI"],
+            "XLC (Comm)": ["XLC", "META", "GOOGL", "GOOG", "NFLX", "TMUS", "VZ"],
+            "SMH (Semis)": ["SMH", "NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM"],
+            "ARKK (Innovation)": ["ARKK", "TSLA", "COIN", "ROKU", "PATH", "SPOT", "TDOC"],
+            "IBIT (Bitcoin)": ["IBIT", "BTCUSD", "MSTR", "MARA", "RIOT", "HOOD", "COIN"],
+            "HACK (Cyber)": ["HACK", "CSCO", "PANW", "CRWD", "NET", "ZS", "FTNT"],
+            "ICLN (Clean Energy)": ["ICLN", "FSLR", "ENPH", "NEE", "IBE", "ORSTED", "EDP"],
+            "IWM (Small Cap)": ["IWM", "VRTX", "VRT", "SMCI", "DECK", "STX", "MSTR"]
         };
 
-        let chartInstance = null;
+        let chartObj = null;
 
-        async function runAnalysis() {
+        async function runGlobalIntelligence() {
             const dash = document.getElementById('dashboard');
-            dash.innerHTML = '<div class="col-span-full py-10 text-center text-blue-500 font-black animate-pulse uppercase">Reading Institutional Tape...</div>';
+            dash.innerHTML = '<div class="col-span-full py-10 text-center font-black text-blue-500 animate-pulse text-xs tracking-widest">READING THE TAPE...</div>';
 
             try {
+                // Fetch snapshots (Note: Dates set to match recent market days)
                 const url = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-24?adjusted=true&apiKey=${POLYGON_KEY}`;
                 const prevUrl = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-23?adjusted=true&apiKey=${POLYGON_KEY}`;
                 
@@ -74,81 +87,94 @@
 
                 let html = '';
                 let chartLabels = [];
-                let chartValues = [];
-                let analysisData = [];
+                let chartScores = [];
+                let flowData = [];
 
-                for (const [sector, tickers] of Object.entries(groups)) {
+                for (const [group, tickers] of Object.entries(masterList)) {
                     let rows = '';
-                    let score = 0;
+                    let sectorScore = 0;
 
                     tickers.forEach(t => {
-                        const c = currMap.get(t);
-                        const p = prevMap.get(t);
+                        const c = currMap.get(t.replace('.', '')); // Handle BRK.B
+                        const p = prevMap.get(t.replace('.', ''));
                         let sig = { l: "--", c: "text-slate-700" };
 
                         if (c && p) {
                             const hb = c.h > p.h; const lb = c.l < p.l;
                             if (hb && lb) sig = { l: "3", c: "sig-3" };
                             else if (!hb && !lb) sig = { l: "1", c: "sig-1" };
-                            else if (hb) { sig = { l: "2U", c: "sig-2u" }; score++; }
-                            else if (lb) { sig = { l: "2D", c: "sig-2d" }; score--; }
+                            else if (hb) { sig = { l: "2U", c: "sig-2u" }; sectorScore++; }
+                            else if (lb) { sig = { l: "2D", c: "sig-2d" }; sectorScore--; }
                         }
-                        rows += `<div class="flex justify-between py-1 border-b border-slate-800/30 text-[10px] font-mono uppercase">
-                                    <span>${t}</span><span class="${sig.c}">${sig.l}</span>
+                        rows += `<div class="flex justify-between py-1 border-b border-slate-800/20 text-[9px] font-mono">
+                                    <span class="text-slate-500">${t}</span><span class="${sig.c}">${sig.l}</span>
                                  </div>`;
                     });
 
-                    chartLabels.push(sector);
-                    chartValues.push(score);
-                    analysisData.push({sector, score});
+                    chartLabels.push(group.split(' ')[0]);
+                    chartScores.push(sectorScore);
+                    flowData.push({name: group, score: sectorScore});
 
-                    html += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
-                                <h3 class="text-blue-500 font-black text-[10px] uppercase mb-3 tracking-widest">${sector}</h3>
+                    html += `<div class="bg-slate-900/60 border border-slate-800 p-3 rounded shadow-xl">
+                                <h3 class="text-blue-400 font-black text-[9px] uppercase mb-2 tracking-tighter">${group}</h3>
                                 ${rows}
                              </div>`;
                 }
 
                 dash.innerHTML = html;
-                renderChart(chartLabels, chartValues);
-                provideGeminiContext(analysisData);
+                renderFlowChart(chartLabels, chartScores);
+                generateIntelligence(flowData);
 
             } catch (e) {
-                dash.innerHTML = `<div class="col-span-full text-red-500 font-bold">SCAN ERROR: CHECK DATES</div>`;
+                dash.innerHTML = `<div class="col-span-full text-red-500 font-black">POLYGON API ERROR: CHECK DATES/KEY</div>`;
             }
         }
 
-        function renderChart(labels, data) {
-            const ctx = document.getElementById('sectorChart').getContext('2d');
-            if (chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(ctx, {
+        function renderFlowChart(labels, data) {
+            const ctx = document.getElementById('flowChart').getContext('2d');
+            if (chartObj) chartObj.destroy();
+            chartObj = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Net Strat Strength (2U vs 2D)',
+                        label: 'Sector Strength (Net 2U)',
                         data: data,
-                        backgroundColor: data.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.6)' : 'rgba(248, 113, 113, 0.6)'),
-                        borderColor: data.map(v => v >= 0 ? '#10b981' : '#f87171'),
-                        borderWidth: 1
+                        backgroundColor: data.map(v => v >= 0 ? '#10b981cc' : '#f87171cc'),
+                        borderRadius: 2
                     }]
                 },
-                options: { scales: { y: { beginAtZero: true, grid: { color: '#1e293b' } } }, plugins: { legend: { display: false } } }
+                options: { 
+                    responsive: true,
+                    scales: { y: { grid: { color: '#1e293b' }, ticks: { font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } },
+                    plugins: { legend: { display: false } }
+                }
             });
         }
 
-        function provideGeminiContext(data) {
-            const textEl = document.getElementById('analysis-text');
-            const box = document.getElementById('gemini-context');
-            box.classList.remove('hidden');
+        function generateIntelligence(data) {
+            const container = document.getElementById('gemini-box');
+            const output = document.getElementById('gemini-analysis');
+            container.classList.remove('hidden');
 
-            const leader = data.reduce((prev, current) => (prev.score > current.score) ? prev : current);
-            const laggard = data.reduce((prev, current) => (prev.score < current.score) ? prev : current);
+            const strong = data.filter(d => d.score >= 4);
+            const weak = data.filter(d => d.score <= -4);
 
-            textEl.innerHTML = `
-                <p class="mb-2 font-bold text-white">The institutional flow is currently pivoting toward <span class="text-emerald-400 underline">${leader.sector}</span>.</p>
-                <p class="mb-2">A <strong>Simultaneous Break</strong> is identified when the net strength score is high. The rationale is clear: institutions are buying the sector, not just the stock. Conversely, <span class="text-red-400 underline">${laggard.sector}</span> is showing signs of distribution (The Shooter setup Alex mentioned).</p>
-                <p class="text-slate-400 italic text-xs">Note: Ensure Monthly FTFC is Green before following any "2U" signals in the ${leader.sector} group.</p>
-            `;
+            let analysisHtml = '';
+
+            if (strong.length > 0) {
+                analysisHtml += `<p><strong>Institutional Buying:</strong> Simultaneous breaks detected in <span class="text-emerald-400">${strong.map(s => s.name).join(', ')}</span>. The rationale suggests broad thematic accumulation.</p>`;
+            } else {
+                analysisHtml += `<p><strong>Institutional Caution:</strong> No widespread simultaneous breaks found. Most sectors are in equilibrium (1) or individual rotation.</p>`;
+            }
+
+            if (weak.length > 0) {
+                analysisHtml += `<p><strong>Risk Avoidance:</strong> Distribution patterns appearing in <span class="text-red-400">${weak.map(w => w.name).join(', ')}</span>. Watch for "The Shooter" on the Monthly chart as highlighted in the video.</p>`;
+            }
+
+            analysisHtml += `<p class="text-slate-500 text-[11px] italic">Strategic Check: Verify that ${strong.length > 0 ? strong[0].name : 'your target sector'} has Monthly Green Continuity before size entry.</p>`;
+
+            output.innerHTML = analysisHtml;
         }
     </script>
 </body>
