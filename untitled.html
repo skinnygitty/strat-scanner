@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strat Sector Dashboard | Institutional Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .signal-2up { color: #10b981; font-weight: 800; } /* Green Institutional Buying */
+        .signal-2down { color: #f87171; font-weight: 800; } /* Red Institutional Selling */
+        .signal-3 { color: #60a5fa; font-weight: 800; text-decoration: underline; } /* Blue Volatility/Outside */
+        .signal-1 { color: #fbbf24; font-weight: 800; } /* Amber Equilibrium */
+        .caution-border { border: 2px solid #ef4444; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+
+    <header class="mb-8 flex justify-between items-center border-b border-slate-700 pb-6">
+        <div>
+            <h1 class="text-3xl font-black text-blue-400 tracking-tight">THE STRAT: FLOW SCANNER</h1>
+            <p class="text-slate-400 text-sm mt-1">Rationale: Identifying Simultaneous Sector Breaks & Outside Bar Volatility</p>
+        </div>
+        <button onclick="runGlobalScan()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-10 rounded-lg shadow-lg shadow-blue-900/20 transition-all active:scale-95">
+            INITIALIZE SCAN
+        </button>
+    </header>
+
+    <div id="dashboard" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        </div>
+
+    <script>
+        const POLYGON_KEY = "lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn";
+
+        const sectors = {
+            "Semiconductors (Leading)": ["SMH", "NVDA", "AMD", "ARM", "INTC", "TXN"],
+            "Big Tech (FTFC Check)": ["AAPL", "MSFT", "GOOGL", "ORCL", "CRM", "ADBE"],
+            "Energy (Inside Year)": ["XLE", "XOP", "OIH", "XOM", "CVX", "COP", "MPC", "DVN"],
+            "Financials (The Shooters)": ["XLF", "V", "MA", "AXP", "BLK", "JPM", "BAC", "GS"],
+            "Defense/Health (Avoid List)": ["LMT", "RTX", "NOC", "GE", "LLY", "MRK", "GILD"],
+            "Crypto Support": ["X:SOLUSD", "X:XRPUSD", "X:BTCUSD", "COIN", "HOOD"]
+        };
+
+        async function fetchStratData(ticker) {
+            try {
+                // Using 2026 dates per system time for the "Weekend Update" context
+                const url = `https://api.polygon.io/v2/aggs/ticker/${ticker}/range/1/day/2026-04-20/2026-04-27?adjusted=true&sort=desc&limit=2&apiKey=${lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (!data.results || data.results.length < 2) return { label: "N/A", class: "" };
+
+                const [curr, prev] = data.results;
+                const highBreak = curr.h > prev.h;
+                const lowBreak = curr.l < prev.l;
+
+                if (highBreak && lowBreak) return { label: "3 (Outside)", class: "signal-3" };
+                if (!highBreak && !lowBreak) return { label: "1 (Inside)", class: "signal-1" };
+                if (highBreak) return { label: "2-Up", class: "signal-2up" };
+                if (lowBreak) return { label: "2-Down", class: "signal-2down" };
+                
+                return { label: "2-Neutral", class: "text-slate-500" };
+            } catch (e) { return { label: "Error", class: "text-red-800" }; }
+        }
+
+        async function runGlobalScan() {
+            const container = document.getElementById('dashboard');
+            container.innerHTML = '<div class="col-span-full py-20 text-center text-xl text-blue-400 font-bold animate-pulse">READING TAPE...</div>';
+
+            let dashboardHtml = '';
+
+            for (const [name, tickers] of Object.entries(sectors)) {
+                let tickerHtml = '';
+                let sectorSignals = [];
+
+                for (const t of tickers) {
+                    const res = await fetchStratData(t);
+                    sectorSignals.push(res.label);
+                    tickerHtml += `
+                        <div class="flex justify-between items-center py-2 border-b border-slate-700/50">
+                            <span class="text-slate-300 font-bold">${t.replace('X:', '')}</span>
+                            <span class="${res.class}">${res.label}</span>
+                        </div>`;
+                }
+
+                // Logic: Caution if 50% of sector is "Outside" or "2-Down"
+                const isVolatile = sectorSignals.filter(s => s.includes("3") || s.includes("Down")).length > (tickers.length / 2);
+                const cautionClass = isVolatile ? 'caution-border shadow-red-900/10' : 'border-slate-700 shadow-black/20';
+
+                dashboardHtml += `
+                    <div class="bg-slate-800 rounded-xl p-5 shadow-2xl border ${cautionClass} transition-all hover:scale-[1.02]">
+                        <h3 class="text-blue-400 font-black text-lg mb-4 tracking-wider uppercase">${name}</h3>
+                        ${tickerHtml}
+                        <div class="mt-4 pt-3 text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+                            ${isVolatile ? '⚠️ High Sell-Side/Vol Flow' : '✅ Stable/Bullish Flow'}
+                        </div>
+                    </div>`;
+            }
+            container.innerHTML = dashboardHtml;
+        }
+    </script>
+</body>
+</html>
