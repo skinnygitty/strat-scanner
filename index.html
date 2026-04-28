@@ -3,35 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strat Flow Dashboard</title>
+    <title>Strat Sector Analysis</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .sig-2u { color: #10b981; font-weight: 800; } /* Green Institutional Buying */
-        .sig-2d { color: #f87171; font-weight: 800; } /* Red Institutional Selling */
-        .sig-3 { color: #60a5fa; font-weight: 800; text-decoration: underline; } /* Volatility/Broadening */
-        .sig-1 { color: #fbbf24; font-weight: 800; } /* Equilibrium/Inside */
-        .card-bullish { border-top: 4px solid #10b981; }
-        .card-bearish { border-top: 4px solid #ef4444; }
+        .sig-2u { color: #10b981; font-weight: 800; }
+        .sig-2d { color: #f87171; font-weight: 800; }
+        .sig-3 { color: #60a5fa; font-weight: 800; text-decoration: underline; }
+        .sig-1 { color: #fbbf24; font-weight: 800; }
+        .bg-obsidian { background: #0b0f1a; }
     </style>
 </head>
-<body class="bg-[#0b0f1a] text-slate-300 min-h-screen p-4 font-sans">
+<body class="bg-obsidian text-slate-300 min-h-screen p-4 font-sans">
 
     <div class="max-w-7xl mx-auto">
-        <header class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+        <header class="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
             <div>
-                <h1 class="text-xl font-black text-white italic tracking-tighter uppercase">Strat Institutional Dashboard</h1>
-                <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase">Simultaneous Breaks • Sector Rotation • Flow Analysis</p>
+                <h1 class="text-2xl font-black text-white italic tracking-tighter">STRAT FLOW DASHBOARD</h1>
+                <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase">Context: Monthly Continuity & Simultaneous Breaks</p>
             </div>
-            <button onclick="runStratScan()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2 px-6 rounded uppercase tracking-widest transition-all">Execute Global Scan</button>
+            <button onclick="runAnalysis()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2 px-8 rounded-full uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20">
+                Execute Intelligence Scan
+            </button>
         </header>
 
-        <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div id="dashboard" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
             </div>
 
-        <div id="analysis-trigger" class="mt-8 hidden border-t border-slate-800 pt-6">
-            <div class="bg-slate-900/40 p-4 rounded-lg border border-slate-800">
-                <h2 class="text-blue-400 text-xs font-black uppercase mb-2 tracking-widest italic underline">Institutional Flow Analysis</h2>
-                <p id="gemini-status" class="text-xs text-slate-400">Scan complete. Analyze the simultaneous breaks above. Copy the data into our chat for a full Gemini interpretation of leaders and laggards.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <div class="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
+                <h2 class="text-white text-xs font-black uppercase mb-4 tracking-widest">Sector Strength Comparison</h2>
+                <canvas id="sectorChart" height="200"></canvas>
+            </div>
+
+            <div id="gemini-context" class="bg-blue-900/10 border border-blue-500/30 p-6 rounded-xl hidden">
+                <h3 class="text-blue-400 font-black text-sm italic mb-3 uppercase underline">Gemini Strategic Context</h3>
+                <div id="analysis-text" class="text-sm leading-relaxed text-slate-200">
+                    </div>
             </div>
         </div>
     </div>
@@ -40,30 +48,20 @@
         const POLYGON_KEY = "lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn";
 
         const groups = {
-            "XLK (Tech)": ["XLK", "MSFT", "AAPL", "NVDA", "AVGO", "ORCL", "ADBE"],
-            "XLF (Financial)": ["XLF", "BRK.B", "JPM", "V", "MA", "BAC", "GS"],
-            "XLE (Energy)": ["XLE", "XOM", "CVX", "COP", "SLB", "EOG", "MPC"],
-            "XLV (Health)": ["XLV", "LLY", "UNH", "JNJ", "ABBV", "MRK", "TMO"],
-            "XLY (Discretionary)": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE", "LOW"],
-            "XLP (Staples)": ["XLP", "PG", "COST", "KO", "PEP", "PM", "WMT"],
-            "XLI (Industrial)": ["XLI", "GE", "CAT", "UNP", "HON", "RTX", "LMT"],
-            "XLB (Materials)": ["XLB", "LIN", "APD", "SHW", "FCX", "ECL", "NEM"],
-            "XLU (Utilities)": ["XLU", "NEE", "SO", "DUK", "CEG", "SRE", "AEP"],
-            "XLRE (Real Estate)": ["XLRE", "PLD", "AMT", "EQIX", "WELL", "PSA", "CCI"],
-            "XLC (Comm)": ["XLC", "META", "GOOGL", "GOOG", "NFLX", "TMUS", "VZ"],
-            "SMH (Semis)": ["SMH", "NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM"],
-            "ARKK (Innovation)": ["ARKK", "TSLA", "COIN", "ROKU", "PATH", "SPOT", "TDOC"],
-            "IBIT (Bitcoin)": ["IBIT", "BTC-USD", "COIN", "MSTR", "MARA", "RIOT", "HOOD"],
-            "HACK (Cyber)": ["HACK", "CSCO", "PANW", "CRWD", "NET", "ZS", "FTNT"],
-            "ICLN (Clean Energy)": ["ICLN", "FSLR", "ENPH", "NEE", "IBE", "ORSTED", "EDP"]
+            "Technology": ["XLK", "MSFT", "AAPL", "NVDA", "ADBE", "ORCL", "CRM"],
+            "Semis": ["SMH", "AMD", "TSM", "AVGO", "ARM", "INTC", "TXN"],
+            "Financials": ["XLF", "JPM", "V", "MA", "AXP", "BLK", "GS"],
+            "Energy": ["XLE", "XOP", "OIH", "XOM", "CVX", "COP", "MPC"],
+            "Thematic": ["ARKK", "HACK", "ICLN", "IBIT", "MSTR", "COIN"]
         };
 
-        async function runStratScan() {
-            const container = document.getElementById('dashboard');
-            container.innerHTML = '<div class="col-span-full py-20 text-center text-blue-500 font-black animate-pulse">PULLING INSTITUTIONAL TAPE...</div>';
+        let chartInstance = null;
+
+        async function runAnalysis() {
+            const dash = document.getElementById('dashboard');
+            dash.innerHTML = '<div class="col-span-full py-10 text-center text-blue-500 font-black animate-pulse uppercase">Reading Institutional Tape...</div>';
 
             try {
-                // Fetch snapshots for current and previous days
                 const url = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-24?adjusted=true&apiKey=${POLYGON_KEY}`;
                 const prevUrl = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-23?adjusted=true&apiKey=${POLYGON_KEY}`;
                 
@@ -75,44 +73,82 @@
                 const prevMap = new Map(prevData.results.map(i => [i.T, i]));
 
                 let html = '';
+                let chartLabels = [];
+                let chartValues = [];
+                let analysisData = [];
 
-                for (const [groupName, tickers] of Object.entries(groups)) {
+                for (const [sector, tickers] of Object.entries(groups)) {
                     let rows = '';
-                    let upCount = 0;
-                    let downCount = 0;
+                    let score = 0;
 
                     tickers.forEach(t => {
-                        const c = currMap.get(t.replace('.', ''));
-                        const p = prevMap.get(t.replace('.', ''));
-                        let sig = { l: "N/A", c: "text-slate-700" };
+                        const c = currMap.get(t);
+                        const p = prevMap.get(t);
+                        let sig = { l: "--", c: "text-slate-700" };
 
                         if (c && p) {
-                            const hb = c.h > p.h;
-                            const lb = c.l < p.l;
+                            const hb = c.h > p.h; const lb = c.l < p.l;
                             if (hb && lb) sig = { l: "3", c: "sig-3" };
                             else if (!hb && !lb) sig = { l: "1", c: "sig-1" };
-                            else if (hb) { sig = { l: "2U", c: "sig-2u" }; upCount++; }
-                            else if (lb) { sig = { l: "2D", c: "sig-2d" }; downCount++; }
+                            else if (hb) { sig = { l: "2U", c: "sig-2u" }; score++; }
+                            else if (lb) { sig = { l: "2D", c: "sig-2d" }; score--; }
                         }
-                        rows += `<div class="flex justify-between py-1 border-b border-slate-800/30 font-mono text-[10px]">
-                                    <span class="text-slate-400">${t}</span><span class="${sig.c}">${sig.l}</span>
+                        rows += `<div class="flex justify-between py-1 border-b border-slate-800/30 text-[10px] font-mono uppercase">
+                                    <span>${t}</span><span class="${sig.c}">${sig.l}</span>
                                  </div>`;
                     });
 
-                    // Determine Card Directional Rationale
-                    const cardStatus = upCount > downCount ? 'card-bullish' : (downCount > upCount ? 'card-bearish' : 'border-slate-800');
+                    chartLabels.push(sector);
+                    chartValues.push(score);
+                    analysisData.push({sector, score});
 
-                    html += `<div class="bg-[#131926] p-3 rounded shadow-lg border-x border-b border-slate-800 ${cardStatus}">
-                                <h3 class="text-[10px] font-black text-blue-400 mb-2 uppercase tracking-tighter">${groupName}</h3>
+                    html += `<div class="bg-slate-900 border border-slate-800 p-4 rounded-lg">
+                                <h3 class="text-blue-500 font-black text-[10px] uppercase mb-3 tracking-widest">${sector}</h3>
                                 ${rows}
                              </div>`;
                 }
-                container.innerHTML = html;
-                document.getElementById('analysis-trigger').classList.remove('hidden');
+
+                dash.innerHTML = html;
+                renderChart(chartLabels, chartValues);
+                provideGeminiContext(analysisData);
 
             } catch (e) {
-                container.innerHTML = `<div class="col-span-full text-red-500 font-bold">SCAN ERROR: CHECK API DATES/KEY</div>`;
+                dash.innerHTML = `<div class="col-span-full text-red-500 font-bold">SCAN ERROR: CHECK DATES</div>`;
             }
+        }
+
+        function renderChart(labels, data) {
+            const ctx = document.getElementById('sectorChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Net Strat Strength (2U vs 2D)',
+                        data: data,
+                        backgroundColor: data.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.6)' : 'rgba(248, 113, 113, 0.6)'),
+                        borderColor: data.map(v => v >= 0 ? '#10b981' : '#f87171'),
+                        borderWidth: 1
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: true, grid: { color: '#1e293b' } } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function provideGeminiContext(data) {
+            const textEl = document.getElementById('analysis-text');
+            const box = document.getElementById('gemini-context');
+            box.classList.remove('hidden');
+
+            const leader = data.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+            const laggard = data.reduce((prev, current) => (prev.score < current.score) ? prev : current);
+
+            textEl.innerHTML = `
+                <p class="mb-2 font-bold text-white">The institutional flow is currently pivoting toward <span class="text-emerald-400 underline">${leader.sector}</span>.</p>
+                <p class="mb-2">A <strong>Simultaneous Break</strong> is identified when the net strength score is high. The rationale is clear: institutions are buying the sector, not just the stock. Conversely, <span class="text-red-400 underline">${laggard.sector}</span> is showing signs of distribution (The Shooter setup Alex mentioned).</p>
+                <p class="text-slate-400 italic text-xs">Note: Ensure Monthly FTFC is Green before following any "2U" signals in the ${leader.sector} group.</p>
+            `;
         }
     </script>
 </body>
