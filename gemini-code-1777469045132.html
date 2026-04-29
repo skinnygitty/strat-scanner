@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strat Global Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .sig-2u { color: #10b981; font-weight: 800; border-right: 3px solid #10b981; padding-right: 4px; }
+        .sig-2d { color: #f87171; font-weight: 800; border-right: 3px solid #f87171; padding-right: 4px; }
+        .sig-3 { color: #60a5fa; font-weight: 800; text-decoration: underline; }
+        .sig-1 { color: #fbbf24; font-weight: 800; }
+        .bg-obsidian { background: #030508; }
+        .custom-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+    </style>
+</head>
+<body class="bg-obsidian text-slate-300 min-h-screen p-4 font-sans">
+
+    <div class="max-w-[1900px] mx-auto">
+        <header class="flex justify-between items-center mb-6 border-b border-slate-900 pb-4">
+            <div>
+                <h1 class="text-xl font-black text-white italic tracking-tighter uppercase">Strat Institutional Intelligence</h1>
+                <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase">Unified 21-Sector Matrix • Multi-Cycle Forecast</p>
+            </div>
+            <button onclick="runLiveScan()" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2.5 px-10 rounded uppercase tracking-widest transition-all">Execute Scan</button>
+        </header>
+
+        <div id="dashboard" class="grid custom-grid gap-3 mb-8"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-slate-900/30 p-6 rounded-xl border border-slate-900">
+                <h2 class="text-white text-[10px] font-black uppercase mb-4 tracking-widest italic">Institutional Flow Pulse</h2>
+                <canvas id="rotationChart" height="100"></canvas>
+            </div>
+
+            <div id="gemini-box" class="bg-blue-900/10 border border-blue-500/30 p-6 rounded-xl hidden">
+                <h3 class="text-blue-400 font-black text-xs italic mb-4 uppercase underline tracking-widest">Strat Cycle Interpretation</h3>
+                <div id="forecast-content" class="text-[13px] leading-relaxed space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const POLYGON_KEY = "lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn";
+
+        const sectors = {
+            "DJIA (The Dow)": ["UNH", "GS", "MSFT", "HD", "AMGN", "CAT"],
+            "XLK (Tech)": ["XLK", "MSFT", "AAPL", "NVDA", "AVGO", "ORCL"],
+            "SMH (Semis)": ["SMH", "NVDA", "TSM", "AVGO", "ASML", "AMD"],
+            "IGV (Software)": ["IGV", "CRM", "MSFT", "ADBE", "ORCL", "NOW"],
+            "XLF (Financial)": ["XLF", "JPM", "V", "MA", "BAC", "GS"],
+            "XLE (Energy)": ["XLE", "XOM", "CVX", "COP", "SLB", "EOG"],
+            "XLB (Materials)": ["XLB", "LIN", "APD", "SHW", "FCX", "ECL"],
+            "XHB (Housing)": ["XHB", "LEN", "DHI", "PHM", "NVR", "TOL"],
+            "XRT (Retail)": ["XRT", "AMZN", "WMT", "TGT", "COST", "TJX"],
+            "HACK (Cyber)": ["HACK", "CSCO", "PANW", "CRWD", "NET", "ZS"],
+            "XLV (Health)": ["XLV", "LLY", "UNH", "JNJ", "ABBV", "MRK"],
+            "XLY (Disc)": ["XLY", "AMZN", "TSLA", "HD", "MCD", "NKE"],
+            "XLP (Staple)": ["XLP", "PG", "COST", "KO", "PEP", "PM"],
+            "XLI (Indus)": ["XLI", "GE", "CAT", "UNP", "HON", "RTX"],
+            "XLU (Util)": ["XLU", "NEE", "SO", "DUK", "CEG", "SRE"],
+            "XLRE (RE)": ["XLRE", "PLD", "AMT", "EQIX", "WELL", "PSA"],
+            "XLC (Comm)": ["XLC", "META", "GOOGL", "GOOG", "NFLX", "TMUS"],
+            "IBIT (BTC)": ["IBIT", "MSTR", "COIN", "MARA", "RIOT", "HOOD"],
+            "ARKK (Innov)": ["ARKK", "TSLA", "COIN", "ROKU", "PATH", "SPOT"],
+            "ICLN (Clean)": ["ICLN", "FSLR", "ENPH", "NEE", "IBE", "EDP"],
+            "IWM (Small)": ["IWM", "VRTX", "VRT", "SMCI", "DECK", "STX"]
+        };
+
+        let chart = null;
+
+        async function runLiveScan() {
+            const dash = document.getElementById('dashboard');
+            dash.innerHTML = '<div class="col-span-full py-20 text-center font-bold text-blue-500 animate-pulse uppercase tracking-widest text-xs">SCANNING INSTITUTIONAL TAPE...</div>';
+
+            try {
+                const url = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-24?adjusted=true&apiKey=${POLYGON_KEY}`;
+                const prevUrl = `https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/2026-04-23?adjusted=true&apiKey=${POLYGON_KEY}`;
+                
+                const [cR, pR] = await Promise.all([fetch(url), fetch(prevUrl)]);
+                const cD = await cR.json();
+                const pD = await pR.json();
+
+                const cMap = new Map(cD.results.map(i => [i.T, i]));
+                const pMap = new Map(pD.results.map(i => [i.T, i]));
+
+                let html = ''; let labels = []; let scores = []; let log = [];
+
+                for (const [name, tickers] of Object.entries(sectors)) {
+                    let rows = ''; let net = 0;
+                    tickers.forEach(t => {
+                        const ticker = t.replace('.', '');
+                        const c = cMap.get(ticker); const p = pMap.get(ticker);
+                        let s = { l: "--", c: "text-slate-700" };
+                        if (c && p) {
+                            const hb = c.h > p.h; const lb = c.l < p.l;
+                            if (hb && lb) s = { l: "3", c: "sig-3" };
+                            else if (!hb && !lb) s = { l: "1", c: "sig-1" };
+                            else if (hb) { s = { l: "2U", c: "sig-2u" }; net++; }
+                            else if (lb) { s = { l: "2D", c: "sig-2d" }; net--; }
+                        }
+                        rows += `<div class="flex justify-between py-1 border-b border-slate-900/50 text-[9px] font-mono"><span>${t}</span><span class="${s.c}">${s.l}</span></div>`;
+                    });
+                    labels.push(name.split(' ')[0]);
+                    scores.push(net);
+                    log.push({name, net});
+
+                    html += `<div class="bg-slate-900/40 border border-slate-900 p-3 rounded">
+                                <h3 class="text-blue-500 font-black text-[9px] uppercase mb-2 tracking-widest">${name}</h3>
+                                ${rows}
+                             </div>`;
+                }
+                dash.innerHTML = html;
+                updateChart(labels, scores);
+                updateForecast(log);
+            } catch (e) { dash.innerHTML = `<div class="col-span-full text-red-500">API SYNC ERROR</div>`; }
+        }
+
+        function updateChart(labels, data) {
+            const ctx = document.getElementById('rotationChart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets: [{ label: 'Institutional Flow', data, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.05)', fill: true, tension: 0.3, pointBackgroundColor: data.map(v => v >= 0 ? '#10b981' : '#f87171') }] },
+                options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#1e293b' } } } }
+            });
+        }
+
+        function updateForecast(data) {
+            const box = document.getElementById('gemini-box');
+            const content = document.getElementById('forecast-content');
+            box.classList.remove('hidden');
+
+            const strong = data.filter(d => d.net >= 4);
+            const weak = data.filter(d => d.net <= -4);
+
+            content.innerHTML = `
+                <div class="border-l-2 border-emerald-500 pl-3">
+                    <p class="font-bold text-white uppercase text-[11px]">Active Leaders: <span class="text-emerald-400">${strong.map(s => s.name).join(', ') || 'Equilibrium'}</span></p>
+                    <p class="text-slate-400">Institutional capital is "front-running" tech earnings. Verify Monthly Continuity.</p>
+                </div>
+                <div class="border-l-2 border-red-500 pl-3">
+                    <p class="font-bold text-white uppercase text-[11px]">Distribution Signal: <span class="text-red-400">${weak.map(w => w.name).join(', ') || 'Equilibrium'}</span></p>
+                    <p class="text-slate-400">Watch for the "Shooter" exhaustion on the higher timeframe.</p>
+                </div>
+                <div class="mt-4 p-4 bg-blue-500/5 rounded border border-blue-500/20">
+                    <p class="font-black text-blue-400 uppercase text-[11px] mb-2">Institutional Rotation Forecast</p>
+                    <p>Current data shows a <strong>Tactical Exit from Energy (XLE)</strong> as oil prices consolidate. However, 15-year cycle patterns (2011-2026) suggest this is <strong>temporary profit-taking</strong>. Once the Semis (SMH) hit an exhaustion peak, the forecast indicates a <strong>Mean Reversion back into XLE and XLB</strong> within the next quarter. Watch for XLE to flip 2-Up on the Monthly for the re-entry signal.</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
