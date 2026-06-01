@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strat Global Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter+Tight:ital,wght@0,400;0,600;0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg:       #04060a;
+            --surface:  #080c12;
+            --surface2: #0c1018;
+            --border:   #131925;
+            --border2:  #1a2333;
+            --text:     #8899aa;
+            --text2:    #c8d8e8;
+            --white:    #edf2f7;
+            --bull:     #00e5a0;
+            --bear:     #ff4d6a;
+            --inside:   #f5c542;
+            --outside:  #60a8ff;
+            --accent:   #2563eb;
+            --hot:      #ff6b35;
+            --mono: 'IBM Plex Mono', monospace;
+            --display: 'Inter Tight', sans-serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 13px;
+            min-height: 100vh;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.07) 2px,
+                rgba(0,0,0,0.07) 4px
+            );
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .header-title {
+            font-family: var(--display);
+            font-size: 22px;
+            font-weight: 900;
+            font-style: italic;
+            letter-spacing: 0.02em;
+            color: var(--white);
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        .header-sub {
+            font-size: 9px;
+            letter-spacing: 0.25em;
+            color: var(--text);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--border2);
+            transition: background .3s;
+        }
+        .status-dot.live { background: var(--bull); box-shadow: 0 0 8px var(--bull); animation: pulse 2s infinite; }
+        .status-dot.scanning { background: var(--inside); box-shadow: 0 0 8px var(--inside); animation: pulse .6s infinite; }
+
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        #scanTime { font-size: 9px; letter-spacing: .1em; color: var(--text); }
+
+        .scan-btn {
+            font-family: var(--display);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 9px 22px;
+            cursor: pointer;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+            transition: background .2s, transform .1s;
+        }
+        .scan-btn:hover { background: #3b82f6; }
+        .scan-btn:active { transform: scale(.97); }
+        .scan-btn:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+
+        /* LEGEND */
+        .legend-bar {
+            display: flex;
+            gap: 16px;
+            padding: 8px 24px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .legend-item {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+        }
+        .lchip {
+            font-family: var(--display);
+            font-size: 10px; font-weight: 700;
+            padding: 1px 6px;
+        }
+        .lchip.c1  { color: var(--inside);  border: 1px solid var(--inside);  }
+        .lchip.c2u { color: var(--bull);    border: 1px solid var(--bull);    }
+        .lchip.c2d { color: var(--bear);    border: 1px solid var(--bear);    }
+        .lchip.c3  { color: var(--outside); border: 1px solid var(--outside); }
+        .sep { width: 1px; height: 14px; background: var(--border2); margin: 0 4px; }
+        .hot-badge {
+            display: flex; align-items: center; gap: 4px;
+            background: rgba(255,107,53,.12);
+            border: 1px solid rgba(255,107,53,.4);
+            color: var(--hot);
+            font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+            padding: 2px 8px;
+        }
+        .hot-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--hot); animation: pulse .8s infinite; }
+
+        /* TABS */
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .tab-btn {
+            font-family: var(--display);
+            font-size: 10px; font-weight: 700;
+            letter-spacing: .18em; text-transform: uppercase;
+            background: none; border: none;
+            color: var(--text);
+            padding: 11px 18px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color .2s, border-color .2s;
+            white-space: nowrap;
+        }
+        .tab-btn.active { color: var(--white); border-bottom-color: var(--accent); }
+        .tab-btn:hover:not(.active) { color: var(--text2); }
+
+        /* MAIN */
+        .main { padding: 20px 24px; }
+
+        /* GRID */
+        .sector-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .sector-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            transition: border-color .2s;
+        }
+        .sector-card:hover { border-color: var(--border2); }
+        .sector-card.hot-card  { border-color: rgba(255,107,53,.5); background: rgba(255,107,53,.03); }
+        .sector-card.bull-card { border-color: rgba(0,229,160,.3); background: rgba(0,229,160,.02); }
+        .sector-card.bear-card { border-color: rgba(255,77,106,.2); }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px 6px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-name {
+            font-family: var(--display);
+            font-size: 13px; font-weight: 700;
+            letter-spacing: .04em; text-transform: uppercase;
+            color: var(--text2);
+        }
+
+        .strat-chip {
+            font-family: var(--display);
+            font-size: 12px; font-weight: 700;
+            padding: 1px 7px;
+        }
+        .chip-1  { color: var(--inside);  border-left: 2px solid var(--inside);  background: rgba(245,197,66,.08); }
+        .chip-2u { color: var(--bull);    border-left: 2px solid var(--bull);    background: rgba(0,229,160,.08); }
+        .chip-2d { color: var(--bear);    border-left: 2px solid var(--bear);    background: rgba(255,77,106,.08); }
+        .chip-3  { color: var(--outside); border-left: 2px solid var(--outside); background: rgba(96,168,255,.08); }
+        .chip-x  { color: var(--text);    border-left: 2px solid var(--border2); background: transparent; }
+
+        .card-rows { padding: 4px 0; }
+
+        .ticker-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 10px;
+            font-size: 11px;
+            letter-spacing: .03em;
+            border-bottom: 1px solid rgba(19,25,37,.7);
+        }
+        .ticker-row:last-child { border-bottom: none; }
+        .ticker-sym { color: var(--text); }
+        .ticker-sig { font-family: var(--display); font-size: 12px; font-weight: 700; }
+        .s-2u { color: var(--bull); }
+        .s-2d { color: var(--bear); }
+        .s-3  { color: var(--outside); text-decoration: underline; }
+        .s-1  { color: var(--inside); }
+        .s-x  { color: #334155; }
+
+        .card-footer {
+            padding: 5px 10px 7px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .price-info { font-size: 10px; }
+        .price-val { color: var(--white); font-weight: 700; }
+        .price-chg { font-size: 9px; }
+        .chg-up { color: var(--bull); }
+        .chg-dn { color: var(--bear); }
+
+        .momentum-tag {
+            font-size: 8px; font-family: var(--display);
+            font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+            padding: 2px 6px;
+        }
+        .mt-inside { background: rgba(245,197,66,.1); color: var(--inside); border: 1px solid rgba(245,197,66,.3); }
+        .mt-b2turn { background: rgba(0,229,160,.1); color: var(--bull);   border: 1px solid rgba(0,229,160,.3); }
+        .mt-b3turn { background: rgba(0,229,160,.1); color: var(--bull);   border: 1px solid rgba(0,229,160,.3); }
+        .mt-bear2  { background: rgba(255,77,106,.1); color: var(--bear);  border: 1px solid rgba(255,77,106,.3); }
+
+        /* NET SCORE BAR */
+        .net-bar {
+            height: 2px;
+            background: var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+        .net-fill {
+            height: 100%;
+            transition: width .4s, background .4s;
+        }
+
+        /* BOTTOM PANELS */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 900px) { .bottom-grid { grid-template-columns: 1fr; } }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 16px;
+        }
+
+        .panel-title {
+            font-family: var(--display);
+            font-size: 10px; font-weight: 700;
+            letter-spacing: .22em; text-transform: uppercase;
+            color: var(--text2);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            font-style: italic;
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .ai-content {
+            font-size: 13px;
+            line-height: 1.75;
+            color: var(--text2);
+            white-space: pre-wrap;
+            min-height: 120px;
+            font-family: var(--display);
+        }
+        .ai-content.loading { color: var(--text); font-style: italic; }
+
+        .ai-thinking {
+            display: flex; gap: 4px; align-items: center;
+            padding: 8px 0;
+        }
+        .ai-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); animation: bounce .9s infinite; }
+        .ai-dot:nth-child(2) { animation-delay: .15s; }
+        .ai-dot:nth-child(3) { animation-delay: .3s; }
+        @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+        .chart-wrap {
+            position: relative;
+            height: 180px;
+            margin-top: 8px;
+        }
+
+        /* TIMEFRAME BADGE */
+        .tf-badge {
+            font-size: 8px; letter-spacing: .15em; text-transform: uppercase;
+            padding: 1px 6px;
+            background: rgba(37,99,235,.1);
+            border: 1px solid rgba(37,99,235,.3);
+            color: #60a8ff;
+            font-family: var(--display);
+            font-weight: 700;
+        }
+
+        /* MOMENTUM ALERT LIST */
+        .alert-list { margin-top: 0; }
+        .alert-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 10px;
+            gap: 8px;
+        }
+        .alert-row:last-child { border-bottom: none; }
+        .alert-sym { color: var(--white); font-weight: 700; font-family: var(--display); font-size: 12px; letter-spacing: .05em; }
+        .alert-name { color: var(--text); font-size: 9px; flex: 1; }
+        .alert-tf { font-size: 8px; color: var(--text); }
+
+        /* Loading card placeholder */
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            height: 160px;
+        }
+        @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        /* Section heading */
+        .section-head {
+            font-family: var(--display);
+            font-size: 10px; font-weight: 700;
+            letter-spacing: .25em; text-transform: uppercase;
+            color: var(--text);
+            margin: 0 0 10px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-head::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .err-msg { color: var(--bear); font-size: 10px; padding: 4px 0; }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div>
+        <div class="header-title">Strat Institutional Intelligence</div>
+        <div class="header-sub">ETFs → Monthly Candle &nbsp;·&nbsp; Stocks → Weekly Candle &nbsp;·&nbsp; AI Rotation Analysis</div>
+    </div>
+    <div class="header-right">
+        <div class="status-dot" id="statusDot"></div>
+        <div id="scanTime">—</div>
+        <button class="scan-btn" id="scanBtn" onclick="runLiveScan()">Execute Scan</button>
+    </div>
+</header>
+
+<div class="legend-bar">
+    <div class="legend-item"><span class="lchip c1">1</span> Inside bar</div>
+    <div class="legend-item"><span class="lchip c2u">2U</span> Bullish break</div>
+    <div class="legend-item"><span class="lchip c2d">2D</span> Bearish break</div>
+    <div class="legend-item"><span class="lchip c3">3</span> Outside bar</div>
+    <div class="sep"></div>
+    <div class="hot-badge"><div class="hot-dot"></div> Momentum alert: inside bar · bear 2 turning · bear 3 turning</div>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('etf')">Sector ETFs <span style="font-size:8px;opacity:.5">Monthly</span></button>
+    <button class="tab-btn" onclick="switchTab('stock')">Momentum Stocks <span style="font-size:8px;opacity:.5">Weekly</span></button>
+    <button class="tab-btn" onclick="switchTab('alerts')">Momentum Alerts</button>
+    <button class="tab-btn" onclick="switchTab('analysis')">AI Analysis</button>
+</div>
+
+<div class="main">
+
+    <!-- ETF TAB -->
+    <div id="tab-etf">
+        <div class="section-head">Sector ETFs <span class="tf-badge">Monthly candle</span></div>
+        <div class="sector-grid" id="etfGrid">
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+    </div>
+
+    <!-- STOCK TAB -->
+    <div id="tab-stock" style="display:none">
+        <div class="section-head">Momentum Stocks <span class="tf-badge">Weekly candle</span></div>
+        <div class="sector-grid" id="stockGrid">
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+    </div>
+
+    <!-- ALERTS TAB -->
+    <div id="tab-alerts" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div class="panel">
+                <div class="panel-title" style="color:var(--inside)">Inside Bars (1)</div>
+                <div class="alert-list" id="alertInside"><div class="ai-content loading">Run scan…</div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-title" style="color:var(--bull)">Bearish → Turning Positive</div>
+                <div class="alert-list" id="alertTurning"><div class="ai-content loading">Run scan…</div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-title" style="color:var(--bear)">Active Bear 2D (Not Turning)</div>
+                <div class="alert-list" id="alertBear2"><div class="ai-content loading">Run scan…</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANALYSIS TAB -->
+    <div id="tab-analysis" style="display:none">
+        <div class="bottom-grid">
+            <div class="panel">
+                <div class="panel-title">
+                    <span style="color:var(--accent)">⬡</span> Strat Cycle Interpretation
+                </div>
+                <div id="interpContent" class="ai-content loading">
+                    <div class="ai-thinking"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
+                    Run scan to generate real-time AI interpretation…
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title">
+                    <span style="color:var(--accent)">⬡</span> Institutional Rotation Forecast
+                </div>
+                <div id="forecastContent" class="ai-content loading">
+                    <div class="ai-thinking"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
+                    Run scan to generate institutional rotation forecast…
+                </div>
+            </div>
+            <div class="panel" style="grid-column:1/-1">
+                <div class="panel-title">Institutional Flow Pulse</div>
+                <div class="chart-wrap">
+                    <canvas id="rotationChart" role="img" aria-label="Institutional flow score by sector">Sector flow scores will appear after scan.</canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const POLYGON_KEY = "lvT1rS4fdQJtn3cWMAcnps4Yf5bvTGTn";
+
+// ── UNIVERSE ──────────────────────────────────────────────────────────────
+const ETF_SECTORS = {
+    "DJIA": ["UNH","GS","MSFT","HD","AMGN","CAT"],
+    "XLK": ["MSFT","AAPL","NVDA","AVGO","ORCL","AMD"],
+    "SMH": ["NVDA","TSM","AVGO","ASML","AMD","MU"],
+    "IGV": ["CRM","MSFT","ADBE","ORCL","NOW","WDAY"],
+    "XLF": ["JPM","V","MA","BAC","GS","WFC"],
+    "XLE": ["XOM","CVX","COP","SLB","EOG","PSX"],
+    "XLB": ["LIN","APD","SHW","FCX","ECL","NEM"],
+    "XHB": ["LEN","DHI","PHM","NVR","TOL","BLDR"],
+    "XRT": ["AMZN","WMT","TGT","COST","TJX","DLTR"],
+    "HACK": ["CSCO","PANW","CRWD","NET","ZS","OKTA"],
+    "XLV": ["LLY","UNH","JNJ","ABBV","MRK","TMO"],
+    "XLY": ["AMZN","TSLA","HD","MCD","NKE","BKNG"],
+    "XLP": ["PG","COST","KO","PEP","PM","MDLZ"],
+    "XLI": ["GE","CAT","UNP","HON","RTX","LMT"],
+    "XLU": ["NEE","SO","DUK","CEG","SRE","AEP"],
+    "XLRE": ["PLD","AMT","EQIX","WELL","PSA","SPG"],
+    "XLC": ["META","GOOGL","NFLX","TMUS","T","VZ"],
+    "IBIT": ["MSTR","COIN","MARA","RIOT","HOOD","CLSK"],
+    "ARKK": ["TSLA","COIN","ROKU","PATH","SPOT","EXAS"],
+    "ICLN": ["FSLR","ENPH","NEE","RUN","SEDG","PLUG"],
+    "IWM": ["VRTX","VRT","SMCI","DECK","STX","LRCX"],
+};
+
+const ETF_NAMES = {
+    "DJIA":"DJIA (The Dow)","XLK":"XLK (Technology)","SMH":"SMH (Semis)",
+    "IGV":"IGV (Software)","XLF":"XLF (Financial)","XLE":"XLE (Energy)",
+    "XLB":"XLB (Materials)","XHB":"XHB (Housing)","XRT":"XRT (Retail)",
+    "HACK":"HACK (Cyber)","XLV":"XLV (Health)","XLY":"XLY (Discret.)",
+    "XLP":"XLP (Staples)","XLI":"XLI (Industrials)","XLU":"XLU (Utilities)",
+    "XLRE":"XLRE (Real Estate)","XLC":"XLC (Comm. Svcs)","IBIT":"IBIT (Bitcoin ETF)",
+    "ARKK":"ARKK (Innovation)","ICLN":"ICLN (Clean Energy)","IWM":"IWM (Small Caps)",
+};
+
+const STOCKS = [
+    {sym:"AAPL",name:"Apple"},    {sym:"NVDA",name:"Nvidia"},    {sym:"MSFT",name:"Microsoft"},
+    {sym:"AMZN",name:"Amazon"},   {sym:"META",name:"Meta"},       {sym:"TSLA",name:"Tesla"},
+    {sym:"GOOGL",name:"Alphabet"},{sym:"JPM",name:"JPMorgan"},    {sym:"GS",name:"Goldman Sachs"},
+    {sym:"BAC",name:"Bank of America"},{sym:"XOM",name:"ExxonMobil"},{sym:"UNH",name:"UnitedHealth"},
+    {sym:"V",name:"Visa"},        {sym:"MA",name:"Mastercard"},   {sym:"COST",name:"Costco"},
+    {sym:"LLY",name:"Eli Lilly"}, {sym:"AVGO",name:"Broadcom"},  {sym:"AMD",name:"AMD"},
+    {sym:"CRWD",name:"CrowdStrike"},{sym:"PLTR",name:"Palantir"}, {sym:"SMCI",name:"Super Micro"},
+    {sym:"MSTR",name:"MicroStrategy"},{sym:"COIN",name:"Coinbase"},{sym:"PANW",name:"Palo Alto"},
+];
+
+// ── STRAT ENGINE ──────────────────────────────────────────────────────────
+function calcStrat(curr, prev) {
+    if (!curr || !prev || curr.h == null || prev.h == null) return {code:'X', label:'—'};
+    const tookH = curr.h > prev.h;
+    const tookL = curr.l < prev.l;
+    if (!tookH && !tookL) return {code:'1',  label:'1 Inside'};
+    if (tookH && tookL)  return {code:'3',  label:'3 Outside', dir: curr.c >= curr.o ? 'bull' : 'bear'};
+    if (tookH)           return {code:'2U', label:'2U Bullish'};
+    return                      {code:'2D', label:'2D Bearish'};
+}
+
+function getMomentumTag(curr, prev, prevprev) {
+    const bar  = calcStrat(curr, prev);
+    const prev2 = calcStrat(prev, prevprev);
+    if (bar.code === '1') return 'inside';
+    if (bar.code === '2U' && prev2.code === '2D') return 'bear2turning';
+    if (bar.code === '2U' && prev2.code === '3' && prev2.dir === 'bear') return 'bear3turning';
+    if (bar.code === '2D') return 'bear2';
+    return null;
+}
+
+// ── POLYGON FETCH ─────────────────────────────────────────────────────────
+// For monthly/weekly candles we use the aggregates endpoint
+async function fetchAggs(ticker, timespan, from, to) {
+    const url = `https://api.polygon.io/v2/aggs/ticker/${ticker}/range/1/${timespan}/${from}/${to}?adjusted=true&sort=asc&limit=10&apiKey=${POLYGON_KEY}`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d.results || []).map(b => ({h:b.h, l:b.l, o:b.o, c:b.c, t:b.t}));
+}
+
+function dateStr(d) { return d.toISOString().slice(0,10); }
+
+function getMonthlyRange() {
+    const to = new Date(); to.setDate(1); to.setHours(0,0,0,0);
+    const from = new Date(to); from.setMonth(from.getMonth() - 4);
+    return { from: dateStr(from), to: dateStr(to) };
+}
+function getWeeklyRange() {
+    const to = new Date();
+    const from = new Date(to); from.setDate(from.getDate() - 70);
+    return { from: dateStr(from), to: dateStr(to) };
+}
+
+// For intraday prices on the ETF symbols themselves, use daily grouped or ticker snapshot
+async function fetchSnapshot(ticker) {
+    const url = `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${POLYGON_KEY}`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const snap = d.ticker;
+    if (!snap) return null;
+    return {
+        price: snap.day?.c || snap.lastTrade?.p || 0,
+        chgPct: snap.todaysChangePerc || 0,
+    };
+}
+
+// ── CHART ─────────────────────────────────────────────────────────────────
+let chartInst = null;
+function renderChart(labels, scores) {
+    const ctx = document.getElementById('rotationChart').getContext('2d');
+    if (chartInst) chartInst.destroy();
+    chartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: scores,
+                backgroundColor: scores.map(v => v > 0 ? 'rgba(0,229,160,.5)' : v < 0 ? 'rgba(255,77,106,.5)' : 'rgba(100,116,139,.3)'),
+                borderColor:     scores.map(v => v > 0 ? '#00e5a0' : v < 0 ? '#ff4d6a' : '#475569'),
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: '#131925' }, ticks: { color: '#8899aa', font: { size: 9 } } },
+                y: { grid: { color: '#131925' }, ticks: { color: '#8899aa', font: { size: 9 } }, border: { color: '#131925' } }
+            }
+        }
+    });
+}
+
+// ── CARD RENDER ───────────────────────────────────────────────────────────
+function chipClass(code) {
+    return {X:'chip-x', '1':'chip-1', '2U':'chip-2u', '2D':'chip-2d', '3':'chip-3'}[code] || 'chip-x';
+}
+function sigClass(code) {
+    return {X:'s-x', '1':'s-1', '2U':'s-2u', '2D':'s-2d', '3':'s-3'}[code] || 's-x';
+}
+function momentumClass(tag) {
+    return {inside:'mt-inside', bear2turning:'mt-b2turn', bear3turning:'mt-b3turn', bear2:'mt-bear2'}[tag] || '';
+}
+function momentumLabel(tag) {
+    return {inside:'Inside Bar ◆', bear2turning:'Bear 2→Bull ↑', bear3turning:'Bear 3→Bull ↑', bear2:'Bear 2D Active'}[tag] || '';
+}
+
+function buildETFCard(etfSym, tickers, tickerResults, etfStrat, etfSnap, momentumTag) {
+    const name = ETF_NAMES[etfSym] || etfSym;
+    const price = etfSnap?.price ? `$${etfSnap.price.toFixed(2)}` : '—';
+    const chgPct = etfSnap?.chgPct;
+    const chgStr = chgPct != null ? (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%' : '—';
+    const chgClass = chgPct >= 0 ? 'chg-up' : 'chg-dn';
+
+    let cardClass = 'sector-card';
+    if (['inside','bear2turning','bear3turning'].includes(momentumTag)) cardClass += ' hot-card';
+    else if (etfStrat.code === '2U' || etfStrat.code === '3') cardClass += ' bull-card';
+    else if (etfStrat.code === '2D') cardClass += ' bear-card';
+
+    const rows = tickers.map(t => {
+        const sig = tickerResults[t] || {code:'X', label:'—'};
+        return `<div class="ticker-row"><span class="ticker-sym">${t}</span><span class="ticker-sig ${sigClass(sig.code)}">${sig.label}</span></div>`;
+    }).join('');
+
+    const netScore = tickers.reduce((n, t) => {
+        const sig = tickerResults[t];
+        if (!sig) return n;
+        if (sig.code === '2U') return n + 1;
+        if (sig.code === '2D') return n - 1;
+        return n;
+    }, 0);
+    const netPct = Math.max(0, Math.min(100, ((netScore + tickers.length) / (tickers.length * 2)) * 100));
+    const netColor = netScore > 0 ? 'var(--bull)' : netScore < 0 ? 'var(--bear)' : 'var(--border2)';
+
+    const tagHtml = momentumTag
+        ? `<span class="momentum-tag ${momentumClass(momentumTag)}">${momentumLabel(momentumTag)}</span>`
+        : '';
+
+    return `<div class="${cardClass}">
+        <div class="card-header">
+            <span class="card-name">${name}</span>
+            <span class="strat-chip ${chipClass(etfStrat.code)}">${etfStrat.label}</span>
+        </div>
+        <div class="net-bar"><div class="net-fill" style="width:${netPct.toFixed(0)}%;background:${netColor}"></div></div>
+        <div class="card-rows">${rows}</div>
+        <div class="card-footer">
+            <div class="price-info">
+                <span class="price-val">${price}</span>
+                <span class="price-chg ${chgClass}"> ${chgStr}</span>
+            </div>
+            ${tagHtml}
+        </div>
+    </div>`;
+}
+
+function buildStockCard(stock, strat, momentumTag, snap) {
+    const price = snap?.price ? `$${snap.price.toFixed(2)}` : '—';
+    const chgPct = snap?.chgPct;
+    const chgStr = chgPct != null ? (chgPct >= 0 ? '+' : '') + chgPct.toFixed(2) + '%' : '—';
+    const chgClass = chgPct >= 0 ? 'chg-up' : 'chg-dn';
+
+    let cardClass = 'sector-card';
+    if (['inside','bear2turning','bear3turning'].includes(momentumTag)) cardClass += ' hot-card';
+    else if (strat.code === '2U') cardClass += ' bull-card';
+    else if (strat.code === '2D') cardClass += ' bear-card';
+
+    const tagHtml = momentumTag
+        ? `<span class="momentum-tag ${momentumClass(momentumTag)}">${momentumLabel(momentumTag)}</span>`
+        : '';
+
+    return `<div class="${cardClass}">
+        <div class="card-header">
+            <span class="card-name" style="font-size:13px;letter-spacing:.06em">${stock.sym}</span>
+            <span class="strat-chip ${chipClass(strat.code)}">${strat.label}</span>
+        </div>
+        <div class="card-rows">
+            <div class="ticker-row"><span class="ticker-sym" style="color:var(--text)">${stock.name}</span></div>
+        </div>
+        <div class="card-footer">
+            <div class="price-info">
+                <span class="price-val">${price}</span>
+                <span class="price-chg ${chgClass}"> ${chgStr}</span>
+            </div>
+            ${tagHtml}
+        </div>
+    </div>`;
+}
+
+// ── ANALYSIS ENGINE (Polygon data only, no external AI) ──────────────────
+function generateInterpretation(allResults, etfScores, etfScoreLabels) {
+    const etfs   = allResults.filter(r => !r.isStock);
+    const stocks = allResults.filter(r => r.isStock);
+
+    const count = (arr, tag) => arr.filter(r => r.momentumTag === tag).length;
+    const etfInside   = etfs.filter(r => r.momentumTag === 'inside');
+    const etfTurning  = etfs.filter(r => r.momentumTag === 'bear2turning' || r.momentumTag === 'bear3turning');
+    const etfBear2    = etfs.filter(r => r.momentumTag === 'bear2');
+    const etfBull     = etfs.filter(r => r.strat?.code === '2U' && !r.momentumTag);
+    const stockInside  = stocks.filter(r => r.momentumTag === 'inside');
+    const stockTurning = stocks.filter(r => r.momentumTag === 'bear2turning' || r.momentumTag === 'bear3turning');
+    const stockBear2   = stocks.filter(r => r.momentumTag === 'bear2');
+
+    const topBull = etfScoreLabels
+        .map((l,i) => ({sym:l, score:etfScores[i]}))
+        .filter(x => x.score > 0)
+        .sort((a,b) => b.score - a.score)
+        .slice(0,4);
+    const topBear = etfScoreLabels
+        .map((l,i) => ({sym:l, score:etfScores[i]}))
+        .filter(x => x.score < 0)
+        .sort((a,b) => a.score - b.score)
+        .slice(0,4);
+
+    const totalBullFlow = etfScores.filter(s => s > 0).reduce((a,b) => a+b, 0);
+    const totalBearFlow = etfScores.filter(s => s < 0).reduce((a,b) => a+b, 0);
+    const marketBias = totalBullFlow + totalBearFlow > 2 ? 'BULLISH' :
+                       totalBullFlow + totalBearFlow < -2 ? 'BEARISH' : 'MIXED/NEUTRAL';
+
+    const lines = [];
+    const scanDate = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+
+    lines.push(`STRAT CYCLE INTERPRETATION — ${scanDate}`);
+    lines.push('');
+    lines.push(`Market Bias: ${marketBias}`);
+    lines.push(`Bullish flow sectors: ${totalBullFlow > 0 ? '+'+totalBullFlow : totalBullFlow} · Bearish flow sectors: ${totalBearFlow}`);
+    lines.push('');
+
+    if (etfInside.length > 0) {
+        lines.push(`INSIDE BARS (Monthly) — Coiled Energy: ${etfInside.map(r=>r.sym).join(', ')}`);
+        lines.push(`These sectors have not taken out the prior monthly bar high or low. Institutional positioning is compressed — a directional break is imminent. Watch for the first 2U or 2D to establish the next leg. Inside bars on monthly charts represent major decision points.`);
+        lines.push('');
+    }
+
+    if (etfTurning.length > 0) {
+        lines.push(`BEARISH → BULLISH TURN (Monthly) — Rotation Signal: ${etfTurning.map(r=>r.sym).join(', ')}`);
+        lines.push(`These sectors were printing bearish bars but are now taking out the prior high on the monthly. This is the textbook institutional re-entry signal in STRAT — a 2D flipping to 2U or a bearish 3 reversing. Momentum traders should be monitoring for continuation above the prior monthly high.`);
+        lines.push('');
+    }
+
+    if (etfBear2.length > 0) {
+        lines.push(`ACTIVE BEAR 2D (Monthly) — Distribution Zones: ${etfBear2.map(r=>r.sym).join(', ')}`);
+        lines.push(`These sectors are printing bearish outside-low monthly bars without reversal. Institutional selling pressure remains intact. Avoid long entries until a 2U flip confirms a change in flow direction.`);
+        lines.push('');
+    }
+
+    if (topBull.length > 0) {
+        lines.push(`Strongest Daily Component Flow: ${topBull.map(x=>`${x.sym}(+${x.score})`).join(' · ')}`);
+    }
+    if (topBear.length > 0) {
+        lines.push(`Weakest Daily Component Flow: ${topBear.map(x=>`${x.sym}(${x.score})`).join(' · ')}`);
+    }
+
+    lines.push('');
+    lines.push(`Weekly Stock Alignment: ${stockTurning.length} turning positive · ${stockInside.length} inside bars · ${stockBear2.length} active bear 2D`);
+    if (stockTurning.length > 0) {
+        lines.push(`Stocks turning: ${stockTurning.map(r=>r.sym).join(', ')} — weekly bar confirmation aligns with potential monthly ETF rotation.`);
+    }
+
+    return lines.join('\n');
+}
+
+function generateForecast(allResults, etfScores, etfScoreLabels) {
+    const etfs   = allResults.filter(r => !r.isStock);
+    const stocks = allResults.filter(r => r.isStock);
+
+    const etfTurning = etfs.filter(r => r.momentumTag === 'bear2turning' || r.momentumTag === 'bear3turning');
+    const etfInside  = etfs.filter(r => r.momentumTag === 'inside');
+    const etfBear2   = etfs.filter(r => r.momentumTag === 'bear2');
+    const stockTurning = stocks.filter(r => r.momentumTag === 'bear2turning' || r.momentumTag === 'bear3turning');
+    const stockInside  = stocks.filter(r => r.momentumTag === 'inside');
+
+    const ranked = etfScoreLabels
+        .map((l,i) => ({sym:l, score:etfScores[i], name: ETF_NAMES[l]||l}))
+        .sort((a,b) => b.score - a.score);
+
+    const topSectors  = ranked.slice(0, 3);
+    const weakSectors = ranked.slice(-3).reverse();
+
+    const lines = [];
+    lines.push(`INSTITUTIONAL ROTATION FORECAST`);
+    lines.push('');
+
+    if (etfTurning.length > 0) {
+        lines.push(`HIGH-CONVICTION LONG SETUPS (Monthly Bearish → Turning Positive):`);
+        etfTurning.forEach(r => {
+            const stocks_in_sector = stocks.filter(s => s.momentumTag && ['bear2turning','bear3turning','inside'].includes(s.momentumTag));
+            lines.push(`  ${r.sym} — Monthly bar flipping bullish. This is where institutional money is re-entering. Seek confirmation on daily 2U before sizing in.`);
+        });
+        lines.push('');
+    }
+
+    if (etfInside.length > 0) {
+        lines.push(`WATCH LIST — INSIDE BARS (Awaiting Directional Break):`);
+        etfInside.forEach(r => {
+            lines.push(`  ${r.sym} — Monthly inside bar. Do not anticipate direction. Enter on break of prior month high (long) or low (short). These are the highest probability setups once they trigger.`);
+        });
+        lines.push('');
+    }
+
+    if (etfBear2.length > 0) {
+        lines.push(`AVOID / DISTRIBUTION ZONES (Active Monthly Bear 2D):`);
+        lines.push(`  ${etfBear2.map(r=>r.sym).join(', ')} — Institutional selling ongoing. No long setups until monthly bar structure changes.`);
+        lines.push('');
+    }
+
+    lines.push(`DAILY FLOW LEADERS (Strongest Component Breadth):`);
+    topSectors.forEach(s => {
+        lines.push(`  ${s.sym} (score +${s.score}) — broad component participation, institutional accumulation likely continuing.`);
+    });
+    lines.push('');
+
+    lines.push(`DAILY FLOW LAGGARDS (Weakest Component Breadth):`);
+    weakSectors.forEach(s => {
+        if (s.score < 0) lines.push(`  ${s.sym} (score ${s.score}) — distribution pattern in components, avoid or reduce exposure.`);
+    });
+
+    if (stockTurning.length > 0) {
+        lines.push('');
+        lines.push(`STOCK ROTATION SIGNALS (Weekly Turning Positive):`);
+        lines.push(`  ${stockTurning.map(r=>`${r.sym}(${r.name})`).join(' · ')}`);
+        lines.push(`  Weekly bar structure turning bullish — these names may lead if their parent sector ETF also confirms.`);
+    }
+
+    if (stockInside.length > 0) {
+        lines.push('');
+        lines.push(`STOCK COIL SETUPS (Weekly Inside Bars):`);
+        lines.push(`  ${stockInside.map(r=>`${r.sym}(${r.name})`).join(' · ')}`);
+        lines.push(`  Weekly inside bars — high-probability breakout pending. Size in on weekly bar break.`);
+    }
+
+    return lines.join('\n');
+}
+
+// ── ALERT LISTS ───────────────────────────────────────────────────────────
+function renderAlerts(allResults) {
+    const inside=[], turning=[], bear2=[];
+
+    allResults.forEach(r => {
+        const tag = r.momentumTag;
+        const tf = r.isStock ? 'weekly' : 'monthly';
+        const html = `<div class="alert-row">
+            <span class="alert-sym">${r.sym}</span>
+            <span class="alert-name">${r.name}</span>
+            <span class="alert-tf">${tf}</span>
+        </div>`;
+        if (tag === 'inside') inside.push(html);
+        else if (tag === 'bear2turning' || tag === 'bear3turning') turning.push(html);
+        else if (tag === 'bear2') bear2.push(html);
+    });
+
+    document.getElementById('alertInside').innerHTML   = inside.join('') || '<div class="err-msg">None detected</div>';
+    document.getElementById('alertTurning').innerHTML  = turning.join('') || '<div class="err-msg">None detected</div>';
+    document.getElementById('alertBear2').innerHTML    = bear2.join('') || '<div class="err-msg">None detected</div>';
+}
+
+// ── MAIN SCAN ─────────────────────────────────────────────────────────────
+async function runLiveScan() {
+    const btn = document.getElementById('scanBtn');
+    const dot = document.getElementById('statusDot');
+    btn.disabled = true; btn.textContent = 'Scanning…';
+    dot.className = 'status-dot scanning';
+    document.getElementById('scanTime').textContent = '—';
+
+    document.getElementById('etfGrid').innerHTML   = [1,2,3,4,5,6].map(()=>'<div class="skeleton"></div>').join('');
+    document.getElementById('stockGrid').innerHTML = [1,2,3,4,5,6].map(()=>'<div class="skeleton"></div>').join('');
+
+    const mRange = getMonthlyRange();
+    const wRange = getWeeklyRange();
+
+    // ── 1. Collect all unique tickers we need monthly bars for
+    const allETFTickers = [...new Set(Object.values(ETF_SECTORS).flat())];
+    const ETF_SYMS = Object.keys(ETF_SECTORS);
+
+    // ── 2. Fetch monthly aggs for ETF symbols themselves + their component tickers (daily agg for components)
+    // For simplicity and Polygon free-tier: we use daily grouped snapshots for the 2-bar comparison
+    // of component tickers, but use monthly aggs for the main ETF STRAT classification.
+
+    // Fetch monthly bars for each ETF symbol
+    const etfMonthlyBars = {};
+    await Promise.all(ETF_SYMS.map(async sym => {
+        try {
+            const bars = await fetchAggs(sym, 'month', mRange.from, mRange.to);
+            etfMonthlyBars[sym] = bars;
+        } catch { etfMonthlyBars[sym] = []; }
+    }));
+
+    // Fetch daily grouped for 2 recent days (for component ticker STRAT)
+    let cMap = new Map(), pMap = new Map();
+    try {
+        const today   = new Date(); today.setHours(0,0,0,0);
+        const d0 = new Date(today); let tries = 0;
+        // Walk back to find last 2 trading days
+        const tds = [];
+        const d = new Date(today);
+        while (tds.length < 4 && tries < 14) {
+            d.setDate(d.getDate() - 1); tries++;
+            const ds = dateStr(d);
+            const r = await fetch(`https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/${ds}?adjusted=true&apiKey=${POLYGON_KEY}`);
+            if (!r.ok) continue;
+            const j = await r.json();
+            if (j.resultsCount > 0) tds.push(j.results);
+            if (tds.length === 2) break;
+        }
+        if (tds[0]) cMap = new Map(tds[0].map(i => [i.T, i]));
+        if (tds[1]) pMap = new Map(tds[1].map(i => [i.T, i]));
+    } catch(e) { console.warn('grouped fetch failed', e); }
+
+    // Fetch snapshots for prices
+    const snapCache = {};
+    await Promise.all(ETF_SYMS.map(async sym => {
+        try { snapCache[sym] = await fetchSnapshot(sym); } catch { snapCache[sym] = null; }
+    }));
+
+    // Fetch weekly bars for stocks
+    const stockWeeklyBars = {};
+    await Promise.all(STOCKS.map(async s => {
+        try {
+            const bars = await fetchAggs(s.sym, 'week', wRange.from, wRange.to);
+            stockWeeklyBars[s.sym] = bars;
+        } catch { stockWeeklyBars[s.sym] = []; }
+    }));
+
+    // Snapshots for stocks
+    await Promise.all(STOCKS.map(async s => {
+        try { snapCache[s.sym] = await fetchSnapshot(s.sym); } catch { snapCache[s.sym] = null; }
+    }));
+
+    // ── 3. Build ETF cards
+    let etfHtml = ''; let etfScoreLabels = []; let etfScores = [];
+    let etfSummaryLines = [];
+    let allResults = [];
+
+    for (const [etfSym, tickers] of Object.entries(ETF_SECTORS)) {
+        // Main ETF strat from monthly bars
+        const bars = etfMonthlyBars[etfSym] || [];
+        const n = bars.length;
+        const etfStrat = n >= 2 ? calcStrat(bars[n-1], bars[n-2]) : {code:'X', label:'—'};
+        const prevBar  = n >= 3 ? calcStrat(bars[n-2], bars[n-3]) : null;
+
+        let momentumTag = null;
+        if (etfStrat.code === '1') momentumTag = 'inside';
+        else if (etfStrat.code === '2U' && prevBar?.code === '2D') momentumTag = 'bear2turning';
+        else if (etfStrat.code === '2U' && prevBar?.code === '3' && prevBar?.dir === 'bear') momentumTag = 'bear3turning';
+        else if (etfStrat.code === '2D') momentumTag = 'bear2';
+
+        // Component ticker strat from daily bars
+        const tickerResults = {};
+        let net = 0;
+        tickers.forEach(t => {
+            const c = cMap.get(t); const p = pMap.get(t);
+            if (c && p) {
+                const sig = calcStrat({h:c.h,l:c.l,o:c.o,c:c.c}, {h:p.h,l:p.l,o:p.o,c:p.c});
+                tickerResults[t] = sig;
+                if (sig.code === '2U') net++;
+                else if (sig.code === '2D') net--;
+            } else {
+                tickerResults[t] = {code:'X', label:'—'};
+            }
+        });
+
+        const snap = snapCache[etfSym];
+        etfHtml += buildETFCard(etfSym, tickers, tickerResults, etfStrat, snap, momentumTag);
+        etfScoreLabels.push(etfSym);
+        etfScores.push(net);
+
+        etfSummaryLines.push(`${ETF_NAMES[etfSym]}: ${etfStrat.label} | flow score: ${net > 0 ? '+' : ''}${net}${momentumTag ? ' [ALERT: '+momentumTag+']' : ''}`);
+        allResults.push({sym: etfSym, name: ETF_NAMES[etfSym]||etfSym, momentumTag, strat: etfStrat, isStock: false});
+    }
+
+    document.getElementById('etfGrid').innerHTML = etfHtml;
+    renderChart(etfScoreLabels, etfScores);
+
+    // ── 4. Build stock cards
+    let stockHtml = ''; let stockSummaryLines = [];
+
+    for (const stock of STOCKS) {
+        const bars = stockWeeklyBars[stock.sym] || [];
+        const n = bars.length;
+        const strat    = n >= 2 ? calcStrat(bars[n-1], bars[n-2]) : {code:'X', label:'—'};
+        const prevBar  = n >= 3 ? calcStrat(bars[n-2], bars[n-3]) : null;
+
+        let momentumTag = null;
+        if (strat.code === '1') momentumTag = 'inside';
+        else if (strat.code === '2U' && prevBar?.code === '2D') momentumTag = 'bear2turning';
+        else if (strat.code === '2U' && prevBar?.code === '3' && prevBar?.dir === 'bear') momentumTag = 'bear3turning';
+        else if (strat.code === '2D') momentumTag = 'bear2';
+
+        const snap = snapCache[stock.sym];
+        stockHtml += buildStockCard(stock, strat, momentumTag, snap);
+        stockSummaryLines.push(`${stock.sym} (${stock.name}): ${strat.label}${momentumTag ? ' [ALERT: '+momentumTag+']' : ''}`);
+        allResults.push({sym: stock.sym, name: stock.name, momentumTag, strat, isStock: true});
+    }
+
+    document.getElementById('stockGrid').innerHTML = stockHtml;
+
+    // ── 5. Alerts
+    renderAlerts(allResults);
+
+    // ── 6. Analysis (Polygon data only)
+    const interpEl = document.getElementById('interpContent');
+    const forecastEl = document.getElementById('forecastContent');
+    interpEl.className = 'ai-content';
+    interpEl.style.color = '';
+    interpEl.textContent = generateInterpretation(allResults, etfScores, etfScoreLabels);
+    forecastEl.className = 'ai-content';
+    forecastEl.style.color = '';
+    forecastEl.textContent = generateForecast(allResults, etfScores, etfScoreLabels);
+
+    // ── Done
+    dot.className = 'status-dot live';
+    const now = new Date();
+    document.getElementById('scanTime').textContent = now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+    btn.disabled = false; btn.textContent = 'Execute Scan';
+}
+
+// ── TAB SWITCH ────────────────────────────────────────────────────────────
+function switchTab(id) {
+    ['etf','stock','alerts','analysis'].forEach(t => {
+        document.getElementById('tab-'+t).style.display = t === id ? '' : 'none';
+    });
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', ['etf','stock','alerts','analysis'][i] === id);
+    });
+}
+
+// Auto-scan on load
+runLiveScan();
+</script>
+</body>
+</html>
