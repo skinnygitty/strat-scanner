@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strat Demand Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter+Tight:ital,wght@0,400;0,600;0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+    --bg:       #04060a;
+    --surface:  #080c12;
+    --surface2: #0c1018;
+    --border:   #131925;
+    --border2:  #1a2333;
+    --text:     #8899aa;
+    --text2:    #c8d8e8;
+    --white:    #edf2f7;
+    --bull:     #00e5a0;
+    --bear:     #ff4d6a;
+    --inside:   #f5c542;
+    --outside:  #60a8ff;
+    --accent:   #2563eb;
+    --hot:      #ff6b35;
+    --mono: 'IBM Plex Mono', monospace;
+    --display: 'Inter Tight', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 0;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+    pointer-events: none;
+    z-index: 999;
+}
+
+a { color: var(--outside); }
+
+/* HEADER */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.header-title {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 900;
+    font-style: italic;
+    letter-spacing: 0.02em;
+    color: var(--white);
+    text-transform: uppercase;
+    line-height: 1;
+}
+
+.header-sub {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text);
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+.header-nav { display: flex; gap: 14px; margin-top: 8px; }
+.header-nav a { font-size: 9px; letter-spacing: .15em; text-transform: uppercase; color: var(--text); text-decoration: none; border-bottom: 1px solid transparent; }
+.header-nav a:hover, .header-nav a.active { color: var(--outside); border-bottom-color: var(--outside); }
+
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border2); transition: background .3s; }
+.status-dot.live { background: var(--bull); box-shadow: 0 0 8px var(--bull); animation: pulse 2s infinite; }
+.status-dot.scanning { background: var(--inside); box-shadow: 0 0 8px var(--inside); animation: pulse .6s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+#scanTime, #scanCount { font-size: 9px; letter-spacing: .1em; color: var(--text); }
+
+.scan-btn {
+    font-family: var(--display);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+    background: var(--accent); color: #fff; border: none; padding: 9px 22px; cursor: pointer;
+    clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    transition: background .2s, transform .1s;
+}
+.scan-btn:hover { background: #3b82f6; }
+.scan-btn:active { transform: scale(.97); }
+.scan-btn:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+
+/* PROGRESS */
+.progress-wrap { padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); display: none; }
+.progress-wrap.show { display: block; }
+.progress-track { height: 3px; background: var(--border); width: 100%; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width .2s; }
+.progress-label { font-size: 9px; letter-spacing: .1em; color: var(--text); padding: 4px 0 6px; }
+
+/* RETRY BANNER */
+.retry-banner {
+    display: flex; align-items: center; gap: 14px; justify-content: space-between;
+    padding: 8px 24px; background: rgba(245,197,66,.06); border-bottom: 1px solid rgba(245,197,66,.25);
+}
+.retry-banner .retry-text { font-size: 10px; color: var(--inside); letter-spacing: .03em; }
+.retry-banner .apply-btn { flex-shrink: 0; }
+
+/* FILTERS */
+.filters-bar {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+    padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.filter-field { display: flex; flex-direction: column; gap: 4px; min-width: 92px; }
+.filter-field label { font-size: 8px; letter-spacing: .15em; text-transform: uppercase; color: var(--text); }
+.filter-field input, .filter-field select {
+    background: var(--surface2); border: 1px solid var(--border2); color: var(--text2);
+    font-family: var(--mono); font-size: 12px; padding: 6px 8px; outline: none; width: 100%;
+}
+.filter-field input:focus, .filter-field select:focus { border-color: var(--accent); }
+.apply-btn {
+    font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase;
+    background: transparent; color: var(--outside); border: 1px solid rgba(96,168,255,.4); padding: 7px 16px; cursor: pointer;
+    transition: background .2s;
+}
+.apply-btn:hover { background: rgba(96,168,255,.08); }
+.reset-btn {
+    font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase;
+    background: transparent; color: var(--text); border: 1px solid var(--border2); padding: 7px 16px; cursor: pointer;
+}
+.reset-btn:hover { color: var(--text2); border-color: var(--text); }
+.universe-note { font-size: 9px; color: var(--text); letter-spacing: .05em; margin-left: auto; align-self: center; text-align: right; }
+
+/* LEGEND */
+.legend-bar { display: flex; gap: 16px; padding: 8px 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.lchip { font-family: var(--display); font-size: 10px; font-weight: 700; padding: 1px 6px; }
+.lchip.c1  { color: var(--inside);  border: 1px solid var(--inside); }
+.lchip.c2u { color: var(--bull);    border: 1px solid var(--bull); }
+.lchip.c2d { color: var(--bear);    border: 1px solid var(--bear); }
+.lchip.c3  { color: var(--outside); border: 1px solid var(--outside); }
+.sep { width: 1px; height: 14px; background: var(--border2); margin: 0 4px; }
+.zchip { font-family: var(--display); font-size: 9px; font-weight: 700; padding: 1px 6px; }
+.zchip.inzone { color: var(--bull); border: 1px solid var(--bull); }
+.zchip.near { color: var(--inside); border: 1px solid var(--inside); }
+
+/* TABS */
+.tab-bar { display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; }
+.tab-btn {
+    font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+    background: none; border: none; color: var(--text); padding: 11px 18px; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: color .2s, border-color .2s; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+.tab-btn.active { color: var(--white); border-bottom-color: var(--accent); }
+.tab-btn:hover:not(.active) { color: var(--text2); }
+.tab-count { font-size: 9px; background: var(--surface2); border: 1px solid var(--border2); padding: 1px 6px; color: var(--text); }
+.tab-btn.active .tab-count { color: var(--outside); border-color: rgba(96,168,255,.4); }
+
+/* MAIN */
+.main { padding: 20px 24px; }
+
+.empty-state { padding: 60px 20px; text-align: center; color: var(--text); font-size: 12px; }
+.empty-state .big { font-family: var(--display); font-size: 15px; color: var(--text2); margin-bottom: 8px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+
+/* TABLE */
+.scan-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); }
+.scan-table thead th {
+    text-align: left; font-family: var(--display); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text); padding: 9px 10px; border-bottom: 1px solid var(--border2); background: var(--surface2); cursor: pointer; white-space: nowrap;
+    user-select: none;
+}
+.scan-table thead th:hover { color: var(--text2); }
+.scan-table thead th.sorted { color: var(--outside); }
+.scan-table tbody tr { border-bottom: 1px solid rgba(19,25,37,.7); cursor: pointer; transition: background .15s; }
+.scan-table tbody tr:hover { background: rgba(37,99,235,.06); }
+.scan-table td { padding: 9px 10px; font-size: 11.5px; white-space: nowrap; }
+.sym-cell { font-family: var(--display); font-weight: 700; color: var(--white); letter-spacing: .04em; }
+.num-up { color: var(--bull); }
+.num-dn { color: var(--bear); }
+
+.grade-badge { font-family: var(--display); font-size: 10px; font-weight: 800; padding: 2px 8px; letter-spacing: .05em; }
+.grade-Aplus { background: rgba(0,229,160,.12); color: var(--bull); border: 1px solid rgba(0,229,160,.4); }
+.grade-A { background: rgba(96,168,255,.12); color: var(--outside); border: 1px solid rgba(96,168,255,.4); }
+.grade-B { background: rgba(245,197,66,.1); color: var(--inside); border: 1px solid rgba(245,197,66,.35); }
+.grade-C { background: rgba(136,153,170,.08); color: var(--text); border: 1px solid var(--border2); }
+
+.score-cell { display: flex; align-items: center; gap: 8px; min-width: 96px; }
+.score-bar-track { width: 54px; height: 4px; background: var(--border); position: relative; overflow: hidden; }
+.score-bar-fill { height: 100%; }
+.score-num { font-family: var(--display); font-weight: 700; color: var(--text2); width: 24px; text-align: right; }
+
+.zone-tag { font-size: 9px; font-family: var(--display); font-weight: 700; padding: 2px 6px; letter-spacing: .05em; }
+.zone-in { background: rgba(0,229,160,.1); color: var(--bull); border: 1px solid rgba(0,229,160,.35); }
+.zone-near { background: rgba(245,197,66,.1); color: var(--inside); border: 1px solid rgba(245,197,66,.35); }
+.zone-ext { color: var(--text); }
+.zone-none { color: #334155; }
+
+.strat-chip { font-family: var(--display); font-size: 11px; font-weight: 700; padding: 1px 7px; }
+.chip-1  { color: var(--inside);  border-left: 2px solid var(--inside);  background: rgba(245,197,66,.08); }
+.chip-2u { color: var(--bull);    border-left: 2px solid var(--bull);    background: rgba(0,229,160,.08); }
+.chip-2d { color: var(--bear);    border-left: 2px solid var(--bear);    background: rgba(255,77,106,.08); }
+.chip-3  { color: var(--outside); border-left: 2px solid var(--outside); background: rgba(96,168,255,.08); }
+.chip-x  { color: var(--text);    border-left: 2px solid var(--border2); background: transparent; }
+
+.rev-flag { color: var(--hot); font-size: 10px; }
+
+/* MODAL / DETAIL */
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(2,4,8,.75); backdrop-filter: blur(2px);
+    display: none; align-items: flex-start; justify-content: center; z-index: 500; padding: 40px 16px; overflow-y: auto;
+}
+.modal-overlay.show { display: flex; }
+.modal-box { background: var(--surface); border: 1px solid var(--border2); width: 100%; max-width: 880px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-title { font-family: var(--display); font-size: 20px; font-weight: 800; color: var(--white); letter-spacing: .02em; }
+.modal-sub { font-size: 10px; color: var(--text); letter-spacing: .08em; margin-top: 2px; }
+.modal-close { background: none; border: 1px solid var(--border2); color: var(--text); width: 28px; height: 28px; cursor: pointer; font-size: 14px; }
+.modal-close:hover { color: var(--white); border-color: var(--text); }
+.modal-body { padding: 20px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
+@media (max-width: 760px) { .modal-body { grid-template-columns: 1fr; } }
+
+.chart-wrap { position: relative; height: 240px; }
+
+.detail-panel { background: var(--surface2); border: 1px solid var(--border); padding: 14px; margin-bottom: 14px; }
+.detail-panel-title { font-family: var(--display); font-size: 9px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--text); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+.score-breakdown-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 10.5px; }
+.score-breakdown-label { flex: 1; color: var(--text); }
+.score-breakdown-track { width: 70px; height: 5px; background: var(--border); position: relative; overflow: hidden; }
+.score-breakdown-fill { height: 100%; background: var(--accent); }
+.score-breakdown-val { width: 34px; text-align: right; color: var(--text2); font-family: var(--display); font-weight: 700; }
+
+.trade-plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tp-item { }
+.tp-label { font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: var(--text); margin-bottom: 3px; }
+.tp-val { font-family: var(--display); font-size: 14px; font-weight: 800; color: var(--white); }
+.tp-val.bull { color: var(--bull); }
+.tp-val.bear { color: var(--bear); }
+.tp-note { font-size: 9px; color: var(--text); margin-top: 8px; line-height: 1.5; }
+
+.stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11px; border-bottom: 1px solid rgba(19,25,37,.6); }
+.stat-row:last-child { border-bottom: none; }
+.stat-row .k { color: var(--text); }
+.stat-row .v { color: var(--text2); font-weight: 600; }
+
+.disclaimer { padding: 14px 24px 30px; font-size: 9px; color: #334155; letter-spacing: .03em; line-height: 1.6; border-top: 1px solid var(--border); margin-top: 20px; }
+
+.err-msg { color: var(--bear); font-size: 10px; padding: 4px 0; }
+</style>
+</head>
+<body>
+
+<header class="header">
+    <div>
+        <div class="header-title">Strat Demand Scanner</div>
+        <div class="header-sub">Weekly Strat &nbsp;·&nbsp; Demand Zone &nbsp;·&nbsp; Setup Score 0&ndash;100</div>
+        <div class="header-nav">
+            <a href="index.html">Sector Rotation</a>
+            <a href="scanner.html" class="active">Demand Scanner</a>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="status-dot" id="statusDot"></div>
+        <div id="scanTime">Not scanned yet</div>
+        <div id="scanCount"></div>
+        <button class="scan-btn" id="scanBtn" onclick="runScan()">Execute Scan</button>
+    </div>
+</header>
+
+<div class="progress-wrap" id="progressWrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel">—</div>
+</div>
+
+<div class="retry-banner" id="retryBanner" style="display:none">
+    <span class="retry-text">—</span>
+    <button class="apply-btn" onclick="retryFailed()">Retry Failed Tickers</button>
+</div>
+
+<div class="filters-bar">
+    <div class="filter-field">
+        <label>Price &ge;</label>
+        <input type="number" id="fPrice" value="20" step="1" min="0">
+    </div>
+    <div class="filter-field">
+        <label>Avg Vol &ge; (K)</label>
+        <input type="number" id="fVol" value="400" step="50" min="0">
+    </div>
+    <div class="filter-field">
+        <label>3M Perf &ge; (%)</label>
+        <input type="number" id="fPerf3mo" value="10" step="1">
+    </div>
+    <div class="filter-field">
+        <label>Week Perf &lt; (%)</label>
+        <input type="number" id="fWeekPerf" value="0" step="0.5">
+    </div>
+    <div class="filter-field">
+        <label>Min Rel Vol (x)</label>
+        <input type="number" id="fRelVol" value="0" step="0.1" min="0">
+    </div>
+    <div class="filter-field">
+        <label>Min Score</label>
+        <input type="number" id="fMinScore" value="0" step="5" min="0" max="100">
+    </div>
+    <div class="filter-field">
+        <label>Sort By</label>
+        <select id="fSort">
+            <option value="score">Setup Score</option>
+            <option value="perf3mo">3M Performance</option>
+            <option value="relvol">Relative Volume</option>
+            <option value="weekperf">Week Performance</option>
+            <option value="sym">Symbol</option>
+        </select>
+    </div>
+    <button class="apply-btn" onclick="applyFiltersOnly()">Apply Filters</button>
+    <button class="reset-btn" onclick="resetFilters()">Reset</button>
+    <div class="universe-note" id="universeNote">Universe: 593 tickers &middot; not yet scanned</div>
+</div>
+
+<div class="legend-bar">
+    <div class="legend-item"><span class="lchip c1">1</span> Inside bar (coil)</div>
+    <div class="legend-item"><span class="lchip c2u">2U</span> Bullish break</div>
+    <div class="legend-item"><span class="lchip c2d">2D</span> Bearish break</div>
+    <div class="legend-item"><span class="lchip c3">3</span> Outside bar</div>
+    <div class="sep"></div>
+    <div class="legend-item"><span class="zchip inzone">IN ZONE</span> price inside demand base</div>
+    <div class="legend-item"><span class="zchip near">NEAR</span> price within 8% of zone</div>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('all')" id="tabbtn-all">Ranked Candidates <span class="tab-count" id="count-all">0</span></button>
+    <button class="tab-btn" onclick="switchTab('aplus')" id="tabbtn-aplus">A+ Setups <span class="tab-count" id="count-aplus">0</span></button>
+    <button class="tab-btn" onclick="switchTab('demand')" id="tabbtn-demand">Near-Demand <span class="tab-count" id="count-demand">0</span></button>
+    <button class="tab-btn" onclick="switchTab('reversal')" id="tabbtn-reversal">Strat Reversals <span class="tab-count" id="count-reversal">0</span></button>
+</div>
+
+<div class="main">
+    <div id="tab-all"></div>
+    <div id="tab-aplus" style="display:none"></div>
+    <div id="tab-demand" style="display:none"></div>
+    <div id="tab-reversal" style="display:none"></div>
+</div>
+
+<div class="disclaimer">
+    Educational tool only &mdash; not investment advice. All classifications (Strat pattern, demand zone, pullback quality, trend confirmation, setup score) are derived from a rules-based heuristic reading of free delayed market data and are approximations, not guarantees. Verify independently before risking capital.
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div>
+                <div class="modal-title" id="modalSym">—</div>
+                <div class="modal-sub" id="modalSub">—</div>
+            </div>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+            <!-- filled dynamically -->
+        </div>
+    </div>
+</div>
+
+<script>
+// ── UNIVERSE ──────────────────────────────────────────────────────────────
+const UNIVERSE = [
+    "A", "AAPL", "ABBV", "ABG", "ABNB", "ABT", "ACN", "ADBE", "ADM", "ADSK",
+    "AEE", "AEM", "AEO", "AEP", "AFL", "AFRM", "AI", "AIG", "AJG", "AKAM",
+    "ALB", "ALGN", "ALL", "ALLE", "ALNY", "AMAT", "AMCR", "AMD", "AME", "AMGN",
+    "AMP", "AMT", "AMZN", "ANF", "ANSS", "AON", "AOS", "APA", "APD", "APO",
+    "APP", "AR", "ARE", "ARES", "ARM", "ARWR", "ASAN", "ASML", "ATO", "AU",
+    "AVB", "AVGO", "AVY", "AXP", "AZO", "BA", "BAC", "BALL", "BATRK", "BAX",
+    "BBY", "BDX", "BEN", "BG", "BILL", "BK", "BKNG", "BKR", "BLDR", "BLK",
+    "BMRN", "BMY", "BNTX", "BOKF", "BRO", "BROS", "BSX", "BURL", "BX", "BXP",
+    "C", "CAG", "CAKE", "CARR", "CAT", "CAVA", "CB", "CBOE", "CBRE", "CCI",
+    "CCK", "CCL", "CDE", "CDNS", "CE", "CEG", "CELH", "CF", "CFLT", "CFR",
+    "CG", "CHD", "CHRD", "CHRW", "CHTR", "CHWY", "CI", "CIEN", "CINF", "CIVI",
+    "CL", "CLSK", "CLX", "CMA", "CMCSA", "CME", "CMG", "CMI", "CMS", "CNC",
+    "CNP", "COF", "COHR", "COIN", "COLD", "COO", "COP", "COST", "CPB", "CPNG",
+    "CQP", "CRM", "CROX", "CRWD", "CSCO", "CSX", "CTRA", "CTSH", "CVNA", "CVS",
+    "CVX", "CYBR", "CZR", "D", "DASH", "DD", "DDOG", "DE", "DECK", "DELL",
+    "DG", "DHC", "DHI", "DHR", "DIS", "DKNG", "DKS", "DLR", "DLTR", "DOCN",
+    "DOCS", "DOV", "DOW", "DPZ", "DRI", "DTE", "DUK", "DUOL", "DVA", "DVN",
+    "DXC", "DXCM", "EA", "EBAY", "ECL", "ED", "EIX", "EL", "ELV", "EMR",
+    "ENPH", "EOG", "EPAM", "EQIX", "EQR", "EQT", "ES", "ESS", "ESTC", "ETN",
+    "ETR", "ETSY", "EVR", "EW", "EWBC", "EXAS", "EXC", "EXPD", "EXPE", "EXR",
+    "F", "FANG", "FAST", "FCX", "FDX", "FE", "FFIV", "FHN", "FIGS", "FIS",
+    "FIVE", "FLEX", "FNV", "FOX", "FOXA", "FROG", "FSLR", "FTI", "FTNT", "FTV",
+    "FWONK", "GD", "GDDY", "GE", "GEN", "GH", "GILD", "GIS", "GLBE", "GLW",
+    "GM", "GNRC", "GOLD", "GOOG", "GOOGL", "GPI", "GPK", "GPN", "GPS", "GS",
+    "GTLB", "GWW", "H", "HAL", "HBAN", "HCA", "HD", "HES", "HIG", "HL",
+    "HLNE", "HLT", "HOLX", "HON", "HOOD", "HPQ", "HRL", "HST", "HSY", "HUBS",
+    "HUM", "HUT", "IAC", "IBM", "ICE", "IDXX", "IEX", "IFF", "INCY", "INSP",
+    "INTC", "INTU", "INVH", "IONQ", "IONS", "IP", "IPG", "IQV", "IR", "IRM",
+    "ISRG", "IT", "ITW", "IVZ", "JAZZ", "JBHT", "JBL", "JCI", "JHG", "JLL",
+    "JNJ", "JNPR", "JPM", "K", "KBH", "KDP", "KEY", "KEYS", "KGC", "KHC",
+    "KIM", "KKR", "KLAC", "KMB", "KMI", "KMX", "KNX", "KO", "KVUE", "LAD",
+    "LAZ", "LCID", "LEN", "LII", "LIN", "LKQ", "LLY", "LMT", "LNG", "LNT",
+    "LOW", "LRCX", "LSTR", "LSXMA", "LULU", "LVS", "LYB", "LYFT", "LYV", "MA",
+    "MAA", "MAR", "MARA", "MAS", "MC", "MCD", "MCO", "MDB", "MDLZ", "MDT",
+    "MELI", "MET", "META", "MGM", "MHK", "MKC", "MLM", "MMC", "MMM", "MNDY",
+    "MNST", "MO", "MOH", "MOS", "MPC", "MPWR", "MRK", "MRNA", "MRO", "MRVL",
+    "MS", "MSCI", "MSFT", "MTCH", "MTDR", "MTH", "MU", "NBIX", "NCLH", "NDAQ",
+    "NEE", "NEM", "NET", "NFLX", "NI", "NKE", "NOC", "NOV", "NOW", "NRG",
+    "NSC", "NTAP", "NTRA", "NTRS", "NUE", "NVAX", "NVCR", "NVDA", "NVR", "NYT",
+    "O", "ODFL", "OKE", "OKTA", "OLO", "OMC", "ON", "ONON", "ORCL", "ORLY",
+    "OTIS", "OVV", "OWL", "OXY", "PAAS", "PAG", "PANW", "PARA", "PATH", "PB",
+    "PCAR", "PCOR", "PCVX", "PD", "PEG", "PENN", "PEP", "PFE", "PG", "PGR",
+    "PH", "PHM", "PINS", "PJT", "PKG", "PLD", "PLTR", "PM", "PNC", "PNW",
+    "PODD", "POOL", "PPG", "PPL", "PR", "PRU", "PSA", "PSX", "PTC", "PWR",
+    "PYCR", "PYPL", "QCOM", "QRVO", "QSR", "QUBT", "RBLX", "RCL", "RDDT", "REG",
+    "REGN", "RF", "RGTI", "RH", "RIOT", "RIVN", "RMD", "ROK", "ROKU", "ROL",
+    "ROP", "ROST", "RPD", "RRC", "RSG", "RTX", "S", "SAIA", "SBAC", "SBUX",
+    "SCHW", "SE", "SEE", "SHAK", "SHOP", "SHW", "SITE", "SJM", "SKX", "SLB",
+    "SM", "SMAR", "SMCI", "SNA", "SNAP", "SNOW", "SNPS", "SNV", "SO", "SOFI",
+    "SON", "SOUN", "SPG", "SPGI", "SPOT", "SRE", "SRPT", "STLD", "STT", "STX",
+    "STZ", "SWAV", "SWK", "SWKS", "SYK", "SYY", "T", "TAP", "TDOC", "TDW",
+    "TDY", "TEAM", "TENB", "TER", "TFC", "TGT", "THO", "TJX", "TMO", "TMUS",
+    "TOL", "TRGP", "TRIP", "TRMB", "TROW", "TRV", "TSCO", "TSLA", "TSM", "TSN",
+    "TT", "TTD", "TTWO", "TXG", "TXN", "TXRH", "U", "UBER", "UHS", "ULTA",
+    "UMBF", "UNH", "UNP", "UPS", "UPST", "URBN", "USB", "V", "VAL", "VEEV",
+    "VICI", "VLO", "VMC", "VRSN", "VRTX", "VST", "VTR", "VZ", "W", "WAB",
+    "WAL", "WBD", "WCN", "WDAY", "WDC", "WEC", "WELL", "WERN", "WFC", "WHR",
+    "WING", "WM", "WMB", "WMS", "WMT", "WPM", "WRB", "WSM", "WSO", "WTFC",
+    "WY", "WYNN", "XEL", "XOM", "XPO", "XYL", "YETI", "YUM", "ZBH", "ZBRA",
+    "ZI", "ZION", "ZS",
+];
+
+// ── DATA FETCH (Yahoo Finance via a rotating set of CORS proxies) ──────────
+// Free anonymous CORS proxies rate-limit or block after a burst of requests.
+// Scanning ~600 tickers in alphabetical order means a mid-scan block looks
+// like "only A-names loaded" — everything after the block point silently
+// fails. We guard against that with: a low concurrency cap, a fallback proxy
+// if the primary is blocked, and a couple of retries with backoff before a
+// ticker is given up on. Failed tickers can also be re-tried from the UI
+// after the main scan finishes (see retryFailed()).
+const PROXIES = [
+    url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function fetchYahooViaProxy(ticker, interval, range, proxyIdx) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&range=${range}&includePrePost=false`;
+    const proxied = PROXIES[proxyIdx](url);
+    const r = await fetch(proxied);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const res = d.chart?.result?.[0];
+    if (!res) throw new Error('no result');
+    const q = res.indicators.quote[0];
+    const ts = res.timestamp;
+    return ts.map((t, i) => ({
+        t, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume[i]
+    })).filter(b => b.h != null && b.l != null && b.c != null);
+}
+
+async function fetchYahoo(ticker, interval, range) {
+    let lastErr;
+    for (let round = 0; round < 2; round++) {
+        for (let p = 0; p < PROXIES.length; p++) {
+            try {
+                return await fetchYahooViaProxy(ticker, interval, range, p);
+            } catch (err) {
+                lastErr = err;
+            }
+        }
+        if (round === 0) await sleep(400 + Math.random() * 400); // backoff before a second full round
+    }
+    throw lastErr || new Error('all proxies failed');
+}
+
+async function batchFetch(items, fetchFn, concurrency, onProgress) {
+    const results = {};
+    let done = 0;
+    for (let i = 0; i < items.length; i += concurrency) {
+        const chunk = items.slice(i, i + concurrency);
+        await Promise.all(chunk.map(async item => {
+            try { results[item] = await fetchFn(item); }
+            catch { results[item] = null; }
+            done++;
+            if (onProgress) onProgress(done, items.length);
+        }));
+    }
+    return results;
+}
+
+// ── STRAT ENGINE ──────────────────────────────────────────────────────────
+function calcStrat(curr, prev) {
+    if (!curr || !prev || curr.h == null || prev.h == null) return {code:'X', label:'—'};
+    const tookH = curr.h > prev.h;
+    const tookL = curr.l < prev.l;
+    if (!tookH && !tookL) return {code:'1',  label:'1 Inside'};
+    if (tookH && tookL)  return {code:'3',  label:'3 Outside', dir: curr.c >= curr.o ? 'bull' : 'bear'};
+    if (tookH)           return {code:'2U', label:'2U Bullish'};
+    return                      {code:'2D', label:'2D Bearish'};
+}
+
+function chipClass(code) { return {X:'chip-x', '1':'chip-1', '2U':'chip-2u', '2D':'chip-2d', '3':'chip-3'}[code] || 'chip-x'; }
+
+// ── WEEKLY RESAMPLE ───────────────────────────────────────────────────────
+function mondayKey(unixSec) {
+    const d = new Date(unixSec * 1000);
+    const day = d.getUTCDay(); // 0=Sun..6=Sat
+    const diff = (day === 0 ? -6 : 1 - day); // back to Monday
+    const monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() + diff);
+    monday.setUTCHours(0,0,0,0);
+    return monday.toISOString().slice(0,10);
+}
+
+function resampleWeekly(dailyBars) {
+    const groups = new Map();
+    for (const b of dailyBars) {
+        const key = mondayKey(b.t);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(b);
+    }
+    const weeks = [];
+    for (const [key, bars] of groups.entries()) {
+        bars.sort((a,b) => a.t - b.t);
+        weeks.push({
+            weekStart: key,
+            o: bars[0].o,
+            h: Math.max(...bars.map(x=>x.h)),
+            l: Math.min(...bars.map(x=>x.l)),
+            c: bars[bars.length-1].c,
+            v: bars.reduce((s,x)=>s + (x.v||0), 0),
+        });
+    }
+    weeks.sort((a,b) => a.weekStart.localeCompare(b.weekStart));
+    return weeks;
+}
+
+// ── DEMAND ZONE DETECTION ─────────────────────────────────────────────────
+// Looks back through completed weekly bars for a "launch week" (strong up
+// week or breakout above the prior 8-week high) and takes the tight base
+// (1-3 weeks) immediately before it as the demand zone.
+function detectDemandZone(weeklyBarsCompleted, currentPrice) {
+    const w = weeklyBarsCompleted;
+    const n = w.length;
+    if (n < 6) return null;
+
+    let bestZone = null;
+    for (let i = n - 2; i >= 4; i--) {
+        const bar = w[i];
+        const weeklyGain = (bar.c - bar.o) / bar.o;
+        const priorHigh = Math.max(...w.slice(Math.max(0,i-8), i).map(x=>x.h));
+        const isLaunch = weeklyGain >= 0.06 || bar.c > priorHigh;
+        if (!isLaunch) continue;
+
+        const baseStart = Math.max(0, i-3);
+        const base = w.slice(baseStart, i);
+        if (base.length < 1) continue;
+        const zoneLow = Math.min(...base.map(x=>x.l));
+        const zoneHigh = Math.max(...base.map(x=>Math.max(x.o, x.c)));
+        if (zoneHigh <= zoneLow) continue;
+        if (zoneHigh >= currentPrice * 1.15) continue; // zone must be reasonably below/near price, not far above
+
+        bestZone = { low: zoneLow, high: zoneHigh, weeksAgo: n - i, launchWeek: bar.weekStart };
+        break; // most recent qualifying zone
+    }
+    return bestZone;
+}
+
+function classifyZoneStatus(zone, currentPrice) {
+    if (!zone) return { status: 'NO_ZONE', distPct: null };
+    if (currentPrice >= zone.low * 0.99 && currentPrice <= zone.high * 1.02) {
+        return { status: 'IN_ZONE', distPct: 0 };
+    }
+    if (currentPrice > zone.high) {
+        const distPct = (currentPrice - zone.high) / zone.high * 100;
+        if (distPct <= 8) return { status: 'NEAR_DEMAND', distPct };
+        return { status: 'EXTENDED', distPct };
+    }
+    // price below zone low — zone broken
+    const distPct = (zone.low - currentPrice) / zone.low * 100;
+    return { status: 'BELOW_ZONE', distPct };
+}
+
+// ── METRICS ───────────────────────────────────────────────────────────────
+function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+function computeMetrics(sym, dailyBars) {
+    const n = dailyBars.length;
+    if (n < 45) return null;
+
+    const currentPrice = dailyBars[n-1].c;
+    const todayVol = dailyBars[n-1].v || 0;
+
+    const last20 = dailyBars.slice(n-20, n);
+    const avgVolume = mean(last20.map(b => b.v || 0));
+
+    const prior20 = dailyBars.slice(Math.max(0,n-21), n-1);
+    const avgVolumePrior = mean(prior20.map(b => b.v || 0)) || 1;
+    const relativeVolume = todayVol / avgVolumePrior;
+
+    const idx3mo = Math.max(0, n - 64);
+    const basePrice = dailyBars[idx3mo].c;
+    const perf3mo = ((currentPrice - basePrice) / basePrice) * 100;
+    const high3mo = Math.max(...dailyBars.slice(idx3mo, n).map(b => b.h));
+    const pullbackPct = ((high3mo - currentPrice) / high3mo) * 100;
+
+    const weeklyAll = resampleWeekly(dailyBars);
+    if (weeklyAll.length < 6) return null;
+    const currentWeek = weeklyAll[weeklyAll.length - 1];
+    const priorWeek = weeklyAll[weeklyAll.length - 2];
+    const priorPriorWeek = weeklyAll[weeklyAll.length - 3];
+    const weekPerf = ((currentPrice - currentWeek.o) / currentWeek.o) * 100;
+
+    const stratCode = calcStrat(currentWeek, priorWeek);
+    const stratCodePrev = calcStrat(priorWeek, priorPriorWeek);
+
+    const completedWeeks = weeklyAll.slice(0, weeklyAll.length - 1);
+    const zone = detectDemandZone(completedWeeks, currentPrice);
+    const zoneInfo = classifyZoneStatus(zone, currentPrice);
+
+    const closes = weeklyAll.map(w => w.c);
+    function sma(arr, period, endIdxExclusive) {
+        const start = Math.max(0, endIdxExclusive - period);
+        const slice = arr.slice(start, endIdxExclusive);
+        return slice.length >= Math.min(period, 4) ? mean(slice) : null;
+    }
+    const sma10 = sma(closes, 10, closes.length);
+    const sma30 = sma(closes, 30, closes.length);
+    const sma30prior = sma(closes, 30, Math.max(0, closes.length - 5));
+
+    const aboveSma30 = sma30 != null && currentPrice > sma30;
+    const maAligned = sma10 != null && sma30 != null && sma10 > sma30;
+    const sma30Rising = sma30 != null && sma30prior != null && sma30 > sma30prior;
+
+    return {
+        sym, currentPrice, avgVolume, relativeVolume, perf3mo, weekPerf,
+        pullbackPct, high3mo, stratCode, stratCodePrev, zone, zoneInfo,
+        sma10, sma30, aboveSma30, maAligned, sma30Rising,
+        weeklyAll, dailyBars,
+    };
+}
+
+// ── SCORING ───────────────────────────────────────────────────────────────
+function pullbackLabel(pct) {
+    if (pct < 0) return 'At Highs';
+    if (pct <= 5) return 'Shallow';
+    if (pct <= 15) return 'Healthy';
+    if (pct <= 25) return 'Deep';
+    return 'Broken';
+}
+
+function computeScore(m) {
+    // Trend confirmation (0-20)
+    let trendCount = 0;
+    if (m.aboveSma30) trendCount++;
+    if (m.maAligned) trendCount++;
+    if (m.sma30Rising) trendCount++;
+    const trendScore = [0,6,12,20][trendCount];
+
+    // Pullback quality (0-20)
+    let pullbackScore;
+    const pb = m.pullbackPct;
+    if (pb < 0) pullbackScore = 4;
+    else if (pb <= 5) pullbackScore = 10;
+    else if (pb <= 15) pullbackScore = 20;
+    else if (pb <= 25) pullbackScore = 12;
+    else pullbackScore = 0;
+
+    // Weekly Strat pattern (0-20)
+    const stratMap = { '2D': 20, '1': 16, '3': 10, '2U': 4, 'X': 0 };
+    const stratScore = stratMap[m.stratCode.code] ?? 0;
+
+    // Relative volume (0-15)
+    let relVolScore;
+    const rv = m.relativeVolume;
+    if (rv >= 3) relVolScore = 15;
+    else if (rv >= 2) relVolScore = 12;
+    else if (rv >= 1.5) relVolScore = 8;
+    else if (rv >= 1.0) relVolScore = 4;
+    else relVolScore = 0;
+
+    // Demand zone proximity (0-25)
+    let demandScore = 0;
+    const zs = m.zoneInfo.status;
+    if (zs === 'IN_ZONE') demandScore = 25;
+    else if (zs === 'NEAR_DEMAND') demandScore = Math.round(25 - (m.zoneInfo.distPct / 8) * 15);
+
+    const total = Math.max(0, Math.min(100, trendScore + pullbackScore + stratScore + relVolScore + demandScore));
+
+    const reversalCandidate = (m.stratCode.code === '1') ||
+        (m.stratCode.code === '2D' && (zs === 'IN_ZONE' || zs === 'NEAR_DEMAND'));
+
+    let grade;
+    if (total >= 85) grade = 'A+';
+    else if (total >= 70) grade = 'A';
+    else if (total >= 55) grade = 'B';
+    else grade = 'C';
+
+    return {
+        total, grade, reversalCandidate,
+        breakdown: [
+            { label: 'Demand Zone Proximity', val: demandScore, max: 25 },
+            { label: 'Weekly Strat Pattern', val: stratScore, max: 20 },
+            { label: 'Pullback Quality', val: pullbackScore, max: 20 },
+            { label: 'Trend Confirmation', val: trendScore, max: 20 },
+            { label: 'Relative Volume', val: relVolScore, max: 15 },
+        ],
+    };
+}
+
+// ── FILTERS ───────────────────────────────────────────────────────────────
+function getFilters() {
+    return {
+        price: parseFloat(document.getElementById('fPrice').value) || 0,
+        vol: (parseFloat(document.getElementById('fVol').value) || 0) * 1000,
+        perf3mo: parseFloat(document.getElementById('fPerf3mo').value),
+        weekPerf: parseFloat(document.getElementById('fWeekPerf').value),
+        relVol: parseFloat(document.getElementById('fRelVol').value) || 0,
+        minScore: parseFloat(document.getElementById('fMinScore').value) || 0,
+        sort: document.getElementById('fSort').value,
+    };
+}
+
+function resetFilters() {
+    document.getElementById('fPrice').value = 20;
+    document.getElementById('fVol').value = 400;
+    document.getElementById('fPerf3mo').value = 10;
+    document.getElementById('fWeekPerf').value = 0;
+    document.getElementById('fRelVol').value = 0;
+    document.getElementById('fMinScore').value = 0;
+    document.getElementById('fSort').value = 'score';
+    applyFiltersOnly();
+}
+
+function passesFilters(m, f) {
+    if (m.currentPrice < f.price) return false;
+    if (m.avgVolume < f.vol) return false;
+    if (!isNaN(f.perf3mo) && m.perf3mo < f.perf3mo) return false;
+    if (!isNaN(f.weekPerf) && m.weekPerf >= f.weekPerf) return false;
+    if (m.relativeVolume < f.relVol) return false;
+    return true;
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+let RAW_METRICS = []; // all computed metrics, unfiltered
+let SCORED = [];       // metrics that passed base filters, with score attached
+let SORT_STATE = { col: 'score', dir: -1 };
+let FETCH_FAILED = []; // tickers whose data fetch itself failed (proxy/network) — distinct from "insufficient history"
+const SCAN_CONCURRENCY = 6; // deliberately conservative: free CORS proxies rate-limit bursty traffic
+
+function setScanningUi(isScanning) {
+    const btn = document.getElementById('scanBtn');
+    const dot = document.getElementById('statusDot');
+    btn.disabled = isScanning;
+    btn.textContent = isScanning ? 'Scanning…' : 'Execute Scan';
+    dot.className = isScanning ? 'status-dot scanning' : 'status-dot live';
+}
+
+async function runScan() {
+    setScanningUi(true);
+    document.getElementById('scanTime').textContent = 'Scanning…';
+    document.getElementById('retryBanner').style.display = 'none';
+    const progWrap = document.getElementById('progressWrap');
+    const progFill = document.getElementById('progressFill');
+    const progLabel = document.getElementById('progressLabel');
+    progWrap.classList.add('show');
+    progFill.style.width = '0%';
+    progLabel.textContent = `0 / ${UNIVERSE.length}`;
+
+    const barsMap = await batchFetch(UNIVERSE, sym => fetchYahoo(sym, '1d', '6mo'), SCAN_CONCURRENCY, (done, total) => {
+        const pct = (done/total*100).toFixed(0);
+        progFill.style.width = pct + '%';
+        progLabel.textContent = `${done} / ${total} tickers scanned`;
+    });
+
+    RAW_METRICS = [];
+    FETCH_FAILED = [];
+    let insufficientCount = 0;
+    for (const sym of UNIVERSE) {
+        const bars = barsMap[sym];
+        if (!bars || !bars.length) { FETCH_FAILED.push(sym); continue; }
+        const m = computeMetrics(sym, bars);
+        if (!m) { insufficientCount++; continue; }
+        RAW_METRICS.push(m);
+    }
+
+    progWrap.classList.remove('show');
+    finishScanUi(insufficientCount);
+    applyFiltersOnly();
+}
+
+async function retryFailed() {
+    if (!FETCH_FAILED.length) return;
+    const toRetry = FETCH_FAILED.slice();
+    setScanningUi(true);
+    document.getElementById('scanTime').textContent = `Retrying ${toRetry.length} ticker(s)…`;
+    const progWrap = document.getElementById('progressWrap');
+    const progFill = document.getElementById('progressFill');
+    const progLabel = document.getElementById('progressLabel');
+    progWrap.classList.add('show');
+    progFill.style.width = '0%';
+
+    const barsMap = await batchFetch(toRetry, sym => fetchYahoo(sym, '1d', '6mo'), SCAN_CONCURRENCY, (done, total) => {
+        const pct = (done/total*100).toFixed(0);
+        progFill.style.width = pct + '%';
+        progLabel.textContent = `Retry: ${done} / ${total}`;
+    });
+
+    const stillFailed = [];
+    let recovered = 0;
+    for (const sym of toRetry) {
+        const bars = barsMap[sym];
+        if (!bars || !bars.length) { stillFailed.push(sym); continue; }
+        const m = computeMetrics(sym, bars);
+        if (!m) continue; // genuinely insufficient history — not a fetch failure, don't keep retrying it
+        RAW_METRICS.push(m);
+        recovered++;
+    }
+    FETCH_FAILED = stillFailed;
+
+    progWrap.classList.remove('show');
+    finishScanUi(0, recovered);
+    applyFiltersOnly();
+}
+
+function finishScanUi(insufficientCount, recovered) {
+    setScanningUi(false);
+    document.getElementById('scanTime').textContent = 'Scanned ' + new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+    const recoveredNote = recovered ? ` · recovered ${recovered}` : '';
+    document.getElementById('scanCount').textContent =
+        `${RAW_METRICS.length} loaded${FETCH_FAILED.length ? ' · ' + FETCH_FAILED.length + ' failed to fetch' : ''}${insufficientCount ? ' · ' + insufficientCount + ' too new/thin' : ''}${recoveredNote}`;
+    document.getElementById('universeNote').textContent = `Universe: ${UNIVERSE.length} tickers · ${RAW_METRICS.length} with sufficient data`;
+
+    const banner = document.getElementById('retryBanner');
+    if (FETCH_FAILED.length > 0) {
+        banner.style.display = 'flex';
+        banner.querySelector('.retry-text').textContent =
+            `${FETCH_FAILED.length} ticker(s) failed to load — likely the free data proxy briefly rate-limited this scan. Not a filter issue.`;
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+function applyFiltersOnly() {
+    const f = getFilters();
+    const filtered = RAW_METRICS.filter(m => passesFilters(m, f));
+    SCORED = filtered.map(m => {
+        const s = computeScore(m);
+        return Object.assign({}, m, { score: s.total, grade: s.grade, reversalCandidate: s.reversalCandidate, breakdown: s.breakdown });
+    }).filter(m => m.score >= f.minScore);
+
+    sortScored(f.sort);
+    renderAll();
+}
+
+function sortScored(key) {
+    const dir = -1; // always descending for these metrics; symbol goes ascending
+    SCORED.sort((a,b) => {
+        if (key === 'sym') return a.sym.localeCompare(b.sym);
+        if (key === 'perf3mo') return (b.perf3mo - a.perf3mo);
+        if (key === 'relvol') return (b.relativeVolume - a.relativeVolume);
+        if (key === 'weekperf') return (a.weekPerf - b.weekPerf); // most negative (weakest week) first
+        return (b.score - a.score);
+    });
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function scoreColor(score) {
+    if (score >= 85) return 'var(--bull)';
+    if (score >= 70) return 'var(--outside)';
+    if (score >= 55) return 'var(--inside)';
+    return 'var(--border2)';
+}
+
+function gradeClass(g) { return { 'A+':'grade-Aplus', 'A':'grade-A', 'B':'grade-B', 'C':'grade-C' }[g]; }
+
+function zoneTagHtml(m) {
+    const s = m.zoneInfo.status;
+    if (s === 'IN_ZONE') return `<span class="zone-tag zone-in">IN ZONE</span>`;
+    if (s === 'NEAR_DEMAND') return `<span class="zone-tag zone-near">NEAR ${m.zoneInfo.distPct.toFixed(1)}%</span>`;
+    if (s === 'EXTENDED') return `<span class="zone-tag zone-ext">+${m.zoneInfo.distPct.toFixed(0)}%</span>`;
+    if (s === 'BELOW_ZONE') return `<span class="zone-tag zone-ext" style="color:var(--bear)">BROKEN</span>`;
+    return `<span class="zone-tag zone-none">No zone</span>`;
+}
+
+function buildRow(m) {
+    const chg = m.weekPerf;
+    const chgClass = chg >= 0 ? 'num-up' : 'num-dn';
+    const perfClass = m.perf3mo >= 0 ? 'num-up' : 'num-dn';
+    return `<tr onclick="openDetail('${m.sym}')">
+        <td class="sym-cell">${m.sym}</td>
+        <td>$${m.currentPrice.toFixed(2)}</td>
+        <td class="${chgClass}">${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%</td>
+        <td class="${perfClass}">${m.perf3mo >= 0 ? '+' : ''}${m.perf3mo.toFixed(1)}%</td>
+        <td>${m.relativeVolume.toFixed(1)}x</td>
+        <td><span class="strat-chip ${chipClass(m.stratCode.code)}">${m.stratCode.label}</span> ${m.reversalCandidate ? '<span class="rev-flag">&#9679; rev</span>' : ''}</td>
+        <td>${pullbackLabel(m.pullbackPct)}</td>
+        <td>${zoneTagHtml(m)}</td>
+        <td>
+            <div class="score-cell">
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:${m.score}%;background:${scoreColor(m.score)}"></div></div>
+                <span class="score-num">${m.score}</span>
+            </div>
+        </td>
+        <td><span class="grade-badge ${gradeClass(m.grade)}">${m.grade}</span></td>
+    </tr>`;
+}
+
+function tableHtml(rows) {
+    if (!rows.length) {
+        return `<div class="empty-state"><div class="big">No candidates</div>Run a scan, or loosen your filters.</div>`;
+    }
+    return `<table class="scan-table">
+        <thead><tr>
+            <th>Symbol</th><th>Price</th><th>Week %</th><th>3M %</th><th>Rel Vol</th>
+            <th>Weekly Strat</th><th>Pullback</th><th>Zone</th><th>Score</th><th>Grade</th>
+        </tr></thead>
+        <tbody>${rows.map(buildRow).join('')}</tbody>
+    </table>`;
+}
+
+function renderAll() {
+    const all = SCORED;
+    const aplus = SCORED.filter(m => m.grade === 'A+');
+    const demand = SCORED.filter(m => m.zoneInfo.status === 'IN_ZONE' || m.zoneInfo.status === 'NEAR_DEMAND');
+    const reversal = SCORED.filter(m => m.reversalCandidate);
+
+    document.getElementById('tab-all').innerHTML = tableHtml(all);
+    document.getElementById('tab-aplus').innerHTML = tableHtml(aplus);
+    document.getElementById('tab-demand').innerHTML = tableHtml(demand);
+    document.getElementById('tab-reversal').innerHTML = tableHtml(reversal);
+
+    document.getElementById('count-all').textContent = all.length;
+    document.getElementById('count-aplus').textContent = aplus.length;
+    document.getElementById('count-demand').textContent = demand.length;
+    document.getElementById('count-reversal').textContent = reversal.length;
+}
+
+function switchTab(id) {
+    ['all','aplus','demand','reversal'].forEach(t => {
+        document.getElementById('tab-'+t).style.display = t === id ? '' : 'none';
+        document.getElementById('tabbtn-'+t).classList.toggle('active', t === id);
+    });
+}
+
+// ── DETAIL MODAL ──────────────────────────────────────────────────────────
+let detailChart = null;
+
+function openDetail(sym) {
+    const m = SCORED.find(x => x.sym === sym) || RAW_METRICS.find(x => x.sym === sym);
+    if (!m) return;
+    const scored = SCORED.find(x => x.sym === sym);
+
+    document.getElementById('modalSym').textContent = m.sym;
+    document.getElementById('modalSub').textContent = `$${m.currentPrice.toFixed(2)} · Weekly ${m.stratCode.label} · ${scored ? scored.grade + ' setup, score ' + scored.score : 'below current score filter'}`;
+
+    const zone = m.zone;
+    const stopPrice = zone ? zone.low * 0.98 : m.currentPrice * 0.92;
+    const entryLow = zone ? zone.low : m.currentPrice * 0.97;
+    const entryHigh = zone ? zone.high : m.currentPrice;
+    const target1 = m.high3mo;
+    const target2 = zone ? zone.high + (zone.high - zone.low) : m.high3mo * 1.08;
+    const risk = Math.max(0.01, m.currentPrice - stopPrice);
+    const rr1 = (target1 - m.currentPrice) / risk;
+    const rr2 = (target2 - m.currentPrice) / risk;
+
+    const breakdown = scored ? scored.breakdown : computeScore(m).breakdown;
+
+    document.getElementById('modalBody').innerHTML = `
+        <div>
+            <div class="chart-wrap"><canvas id="detailChart"></canvas></div>
+            <div class="detail-panel" style="margin-top:14px">
+                <div class="detail-panel-title">Setup Score Breakdown</div>
+                ${breakdown.map(b => `
+                    <div class="score-breakdown-row">
+                        <span class="score-breakdown-label">${b.label}</span>
+                        <div class="score-breakdown-track"><div class="score-breakdown-fill" style="width:${(b.val/b.max*100)}%"></div></div>
+                        <span class="score-breakdown-val">${b.val}/${b.max}</span>
+                    </div>`).join('')}
+            </div>
+        </div>
+        <div>
+            <div class="detail-panel">
+                <div class="detail-panel-title">Trade Plan</div>
+                <div class="trade-plan-grid">
+                    <div class="tp-item">
+                        <div class="tp-label">Entry Zone</div>
+                        <div class="tp-val">$${entryLow.toFixed(2)}&ndash;$${entryHigh.toFixed(2)}</div>
+                    </div>
+                    <div class="tp-item">
+                        <div class="tp-label">Stop</div>
+                        <div class="tp-val bear">$${stopPrice.toFixed(2)}</div>
+                    </div>
+                    <div class="tp-item">
+                        <div class="tp-label">Target 1 (3M High)</div>
+                        <div class="tp-val bull">$${target1.toFixed(2)} <span style="font-size:10px;color:var(--text)">(${rr1.toFixed(1)}R)</span></div>
+                    </div>
+                    <div class="tp-item">
+                        <div class="tp-label">Target 2 (Measured Move)</div>
+                        <div class="tp-val bull">$${target2.toFixed(2)} <span style="font-size:10px;color:var(--text)">(${rr2.toFixed(1)}R)</span></div>
+                    </div>
+                </div>
+                <div class="tp-note">${zone ? `Demand zone identified ${zone.weeksAgo} week(s) ago (base before the ${zone.launchWeek} launch week). Stop set ~2% below zone low; targets use the recent 3-month high and a measured move projected from zone height.` : 'No clean demand zone found in the lookback window — using a generic 8% stop and 3-month-high target. Treat this setup with extra caution and size down.'}</div>
+            </div>
+            <div class="detail-panel">
+                <div class="detail-panel-title">Key Stats</div>
+                <div class="stat-row"><span class="k">Price</span><span class="v">$${m.currentPrice.toFixed(2)}</span></div>
+                <div class="stat-row"><span class="k">Current Week</span><span class="v">${m.weekPerf>=0?'+':''}${m.weekPerf.toFixed(2)}%</span></div>
+                <div class="stat-row"><span class="k">3-Month Perf</span><span class="v">${m.perf3mo>=0?'+':''}${m.perf3mo.toFixed(2)}%</span></div>
+                <div class="stat-row"><span class="k">Pullback from 3M High</span><span class="v">${m.pullbackPct.toFixed(1)}% (${pullbackLabel(m.pullbackPct)})</span></div>
+                <div class="stat-row"><span class="k">Relative Volume</span><span class="v">${m.relativeVolume.toFixed(2)}x</span></div>
+                <div class="stat-row"><span class="k">Avg Volume (20d)</span><span class="v">${(m.avgVolume/1000).toFixed(0)}K</span></div>
+                <div class="stat-row"><span class="k">Weekly Strat Pattern</span><span class="v">${m.stratCode.label}</span></div>
+                <div class="stat-row"><span class="k">Zone Status</span><span class="v">${m.zoneInfo.status.replace('_',' ')}</span></div>
+                <div class="stat-row"><span class="k">10W / 30W SMA</span><span class="v">${m.sma10?'$'+m.sma10.toFixed(2):'—'} / ${m.sma30?'$'+m.sma30.toFixed(2):'—'}</span></div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modalOverlay').classList.add('show');
+    try {
+        renderDetailChart(m, zone);
+    } catch (err) {
+        console.error('Chart render failed:', err);
+        const wrap = document.querySelector('.chart-wrap');
+        if (wrap) wrap.innerHTML = '<div class="err-msg">Chart unavailable (Chart.js failed to load). The rest of the trade plan below is unaffected.</div>';
+    }
+}
+
+function renderDetailChart(m, zone) {
+    if (typeof Chart === 'undefined') throw new Error('Chart.js not loaded');
+    const weeks = m.weeklyAll.slice(-26);
+    const labels = weeks.map(w => w.weekStart.slice(5));
+    const closes = weeks.map(w => w.c);
+
+    const ctx = document.getElementById('detailChart').getContext('2d');
+    if (detailChart) detailChart.destroy();
+
+    const datasets = [{
+        label: 'Weekly Close',
+        data: closes,
+        borderColor: '#60a8ff',
+        backgroundColor: 'rgba(96,168,255,.08)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.15,
+    }];
+
+    if (zone) {
+        datasets.push({
+            label: 'Demand Zone Top',
+            data: labels.map(() => zone.high),
+            borderColor: 'rgba(0,229,160,.5)',
+            borderWidth: 1,
+            borderDash: [4,3],
+            pointRadius: 0,
+            fill: false,
+        });
+        datasets.push({
+            label: 'Demand Zone Low',
+            data: labels.map(() => zone.low),
+            borderColor: 'rgba(0,229,160,.5)',
+            borderWidth: 1,
+            borderDash: [4,3],
+            pointRadius: 0,
+            fill: false,
+        });
+    }
+
+    detailChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: '#131925' }, ticks: { color: '#8899aa', font: { size: 8 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+                y: { grid: { color: '#131925' }, ticks: { color: '#8899aa', font: { size: 9 } }, border: { color: '#131925' } }
+            }
+        }
+    });
+}
+
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('show');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── SORTABLE HEADERS (delegated) ─────────────────────────────────────────
+const HEADER_KEYS = ['sym', null, 'weekperf', 'perf3mo', 'relvol', null, null, null, 'score', null];
+document.addEventListener('click', e => {
+    const th = e.target.closest('.scan-table thead th');
+    if (!th) return;
+    const idx = Array.from(th.parentElement.children).indexOf(th);
+    const key = HEADER_KEYS[idx];
+    if (!key) return;
+    document.getElementById('fSort').value = key;
+    sortScored(key);
+    renderAll();
+});
+
+document.getElementById('universeNote').textContent = `Universe: ${UNIVERSE.length} tickers · not yet scanned`;
+</script>
+</body>
+</html>
